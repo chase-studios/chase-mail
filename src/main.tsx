@@ -11,6 +11,12 @@ import { GmailIntegration } from './components/GmailIntegration';
 import { Account, Mail, Draft, Contact, ExternalMail, AccountTier } from './lib/types';
 import { plannedAddress, getTier, TIERS } from './lib/tiers';
 import { validateRegistrationCode } from './lib/accessCodes';
+import {
+  playChimeSound,
+  updateAppBadge,
+  showSystemNotification,
+  requestNotificationPermission
+} from './lib/notifications';
 
 const url =
   import.meta.env.VITE_SUPABASE_URL || 'https://rvetucuqburqnrgoatui.supabase.co';
@@ -158,6 +164,34 @@ function App() {
   // Previous unread count ref for desktop notifications
   const prevUnreadCountRef = useRef<number>(0);
 
+  // In-App Notification Toast State
+  const [inAppToast, setInAppToast] = useState<{
+    id: string;
+    sender: string;
+    subject: string;
+    preview: string;
+    mail: Mail;
+  } | null>(null);
+
+  // Notification Permission Request Banner State
+  const [showPermissionBanner, setShowPermissionBanner] = useState(() => {
+    return (
+      typeof Notification !== 'undefined' &&
+      Notification.permission === 'default' &&
+      localStorage.getItem('chase-mail-dismiss-notif-banner') !== 'true'
+    );
+  });
+
+  // Auto-dismiss in-app notification toast
+  useEffect(() => {
+    if (inAppToast) {
+      const timer = setTimeout(() => {
+        setInAppToast(null);
+      }, 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [inAppToast]);
+
   // Persist Appearance State
   useEffect(() => {
     document.documentElement.style.setProperty('--custom-accent', accent);
@@ -298,14 +332,35 @@ function App() {
           !trashIds.has(m.id) &&
           !spamIds.has(m.id)
       );
+      // Synchronize PWA Home Screen / Taskbar App Badge with unread inbox count
+      updateAppBadge(unreadInboxMsgs.length);
+
       if (unreadInboxMsgs.length > prevUnreadCountRef.current && prevUnreadCountRef.current > 0) {
         const latest = unreadInboxMsgs[0];
-        if (latest && 'Notification' in window && Notification.permission === 'granted') {
+        if (latest) {
           const senderObj = (allAccsRes.data || []).find(a => a.user_id === latest.sender_id);
           const senderName = senderObj ? senderObj.display_name || senderObj.handle : 'Chase Mail user';
-          new Notification(`Chase Mail: ${latest.subject}`, {
+
+          // Play synthesized luxury audio chime
+          playChimeSound();
+
+          // Dispatch native desktop/mobile push notification
+          void showSystemNotification(`Chase Mail: ${latest.subject}`, {
             body: `${senderName}: ${latest.body.slice(0, 100)}`,
-            icon: '/icon.svg'
+            tag: `chase-mail-${latest.id}`,
+            onClick: () => {
+              setFolder('inbox');
+              setOpened(latest);
+            }
+          });
+
+          // Trigger in-app animated toast alert
+          setInAppToast({
+            id: latest.id,
+            sender: senderName,
+            subject: latest.subject,
+            preview: latest.body.slice(0, 80),
+            mail: latest
           });
         }
       }
@@ -755,6 +810,44 @@ function App() {
           )}
         </div>
       </header>
+
+      {account && showPermissionBanner && (
+        <div className="notification-prompt-banner">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>🔔</span>
+            <span>Enable notifications to get instant alerts on your phone or desktop when new Chase Mail arrives.</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              type="button"
+              className="enable-btn"
+              onClick={async () => {
+                const res = await requestNotificationPermission();
+                setShowPermissionBanner(false);
+                if (res === 'granted') {
+                  void showSystemNotification('Chase Mail Notifications Enabled', {
+                    body: 'You will receive real-time alerts when new emails arrive.'
+                  });
+                  playChimeSound();
+                }
+              }}
+            >
+              Enable Notifications 🔔
+            </button>
+            <button
+              type="button"
+              className="dismiss-btn"
+              onClick={() => {
+                setShowPermissionBanner(false);
+                localStorage.setItem('chase-mail-dismiss-notif-banner', 'true');
+              }}
+              title="Dismiss notification prompt"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {!db ? (
         <main className="panel">
@@ -1606,6 +1699,43 @@ function App() {
         <div className="floating-pet" title={pet.name}>
           {pet.emoji}
           <small>{pet.name}</small>
+        </div>
+      )}
+
+      {inAppToast && (
+        <div className="in-app-toast-container">
+          <div className="in-app-toast">
+            <div className="in-app-toast-header">
+              <div className="in-app-toast-title">
+                <span>✉️</span>
+                <span>New Mail from {inAppToast.sender}</span>
+              </div>
+              <button
+                className="link"
+                style={{ padding: '2px 6px', fontSize: '0.8rem', background: 'transparent', border: 'none', color: '#c5b5d8', cursor: 'pointer' }}
+                onClick={() => setInAppToast(null)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="in-app-toast-body">
+              <strong>{inAppToast.subject}</strong>
+              <div className="in-app-toast-preview">{inAppToast.preview}</div>
+            </div>
+            <div className="in-app-toast-actions">
+              <button
+                type="button"
+                className="in-app-toast-btn"
+                onClick={() => {
+                  setFolder('inbox');
+                  setOpened(inAppToast.mail);
+                  setInAppToast(null);
+                }}
+              >
+                View Message
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

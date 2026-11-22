@@ -3,6 +3,15 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { Account, Contact, Mail, Draft } from '../lib/types';
 import { getTier, plannedAddress } from '../lib/tiers';
 import Update10 from '../Update10';
+import {
+  getNotificationPreferences,
+  saveNotificationPreferences,
+  playChimeSound,
+  updateAppBadge,
+  requestNotificationPermission,
+  showSystemNotification,
+  NotificationPreferences
+} from '../lib/notifications';
 
 interface AccountSettingsProps {
   db: SupabaseClient | null;
@@ -23,7 +32,58 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   onRefresh,
   onSetNotice
 }) => {
-  const [activeTab, setActiveTab] = useState<'security' | 'personalization' | 'export'>('security');
+  const [activeTab, setActiveTab] = useState<'security' | 'notifications' | 'personalization' | 'export'>('security');
+
+  // Notification Preferences State
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences>(() => getNotificationPreferences());
+  const [permissionState, setPermissionState] = useState<NotificationPermission>(() => {
+    return typeof Notification !== 'undefined' ? Notification.permission : 'denied';
+  });
+
+  const handleUpdateNotifPref = (key: keyof NotificationPreferences, value: boolean) => {
+    const updated = { ...notifPrefs, [key]: value };
+    setNotifPrefs(updated);
+    saveNotificationPreferences(updated);
+    if (key === 'appBadgeEnabled' && !value) {
+      updateAppBadge(0);
+    }
+    onSetNotice('Notification preferences saved.');
+  };
+
+  const handleRequestPermission = async () => {
+    const res = await requestNotificationPermission();
+    setPermissionState(res);
+    if (res === 'granted') {
+      onSetNotice('Notifications enabled successfully!');
+      void showSystemNotification('Chase Mail Notifications Enabled', {
+        body: 'You will now receive real-time alerts when new emails arrive.'
+      });
+    } else if (res === 'denied') {
+      onSetNotice('Notification permission was blocked in browser settings.');
+    }
+  };
+
+  const handleTestChime = () => {
+    playChimeSound();
+    onSetNotice('Playing Chase Mail celestial audio chime...');
+  };
+
+  const handleTestNotification = async () => {
+    playChimeSound();
+    if (permissionState !== 'granted') {
+      const res = await requestNotificationPermission();
+      setPermissionState(res);
+      if (res !== 'granted') {
+        onSetNotice('Please grant notification permission first to test system alerts.');
+        return;
+      }
+    }
+    void showSystemNotification('Test Alert: Chase Mail', {
+      body: 'Incoming dispatch received from Chase Studios postmaster.'
+    });
+    updateAppBadge(1);
+    onSetNotice('Test notification and audio chime dispatched!');
+  };
 
   // Profile edit
   const [displayName, setDisplayName] = useState(account.display_name || '');
@@ -255,6 +315,12 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
           🔒 Security & Sessions
         </button>
         <button
+          className={'settings-tab-btn ' + (activeTab === 'notifications' ? 'active' : '')}
+          onClick={() => setActiveTab('notifications')}
+        >
+          🔔 Notifications & Sounds
+        </button>
+        <button
           className={'settings-tab-btn ' + (activeTab === 'personalization' ? 'active' : '')}
           onClick={() => setActiveTab('personalization')}
         >
@@ -438,6 +504,102 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
               <button disabled={busy} onClick={handleRevokeSessions}>
                 Revoke All Other Sessions
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Notifications & Sounds */}
+      {activeTab === 'notifications' && (
+        <div className="settings-section">
+          {/* System Notifications Card */}
+          <div className="settings-card">
+            <h3>✦ System & Mobile Push Notifications</h3>
+            <p className="hint">
+              Receive native notifications on iOS, Android, macOS, or Windows whenever a new email arrives.
+            </p>
+
+            <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="notifications-toggle-row">
+                <div className="notifications-toggle-info">
+                  <span className="notifications-toggle-title">Browser Permission Status</span>
+                  <span className="notifications-toggle-desc">
+                    Current system status: <strong style={{ color: permissionState === 'granted' ? '#4ade80' : permissionState === 'denied' ? '#f87171' : '#facc15' }}>{permissionState.toUpperCase()}</strong>
+                  </span>
+                </div>
+                {permissionState !== 'granted' && (
+                  <button type="button" className="enable-btn" onClick={handleRequestPermission} style={{ minHeight: '36px', padding: '6px 14px' }}>
+                    Request Permission 🔔
+                  </button>
+                )}
+              </div>
+
+              <div className="notifications-toggle-row">
+                <div className="notifications-toggle-info">
+                  <span className="notifications-toggle-title">System Alert Banners</span>
+                  <span className="notifications-toggle-desc">Display desktop and mobile system popups for incoming emails</span>
+                </div>
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    checked={notifPrefs.systemNotifications}
+                    onChange={e => handleUpdateNotifPref('systemNotifications', e.target.checked)}
+                  />
+                  <span className="slider round"></span>
+                </label>
+              </div>
+
+              <div className="notifications-toggle-row">
+                <div className="notifications-toggle-info">
+                  <span className="notifications-toggle-title">App Icon Badge Count</span>
+                  <span className="notifications-toggle-desc">Show unread email count badge on your phone home screen or taskbar icon</span>
+                </div>
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    checked={notifPrefs.appBadgeEnabled}
+                    onChange={e => handleUpdateNotifPref('appBadgeEnabled', e.target.checked)}
+                  />
+                  <span className="slider round"></span>
+                </label>
+              </div>
+
+              <div style={{ marginTop: '8px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <button type="button" onClick={handleTestNotification} style={{ minHeight: '38px', padding: '6px 14px' }}>
+                  Send Test Notification 🔔
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Sound & Chimes Card */}
+          <div className="settings-card">
+            <h3>✦ Audio Chime & Sounds</h3>
+            <p className="hint">
+              Synthesized dual-tone harmonic chime alerts when dispatches land in your inbox.
+            </p>
+
+            <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div className="notifications-toggle-row">
+                <div className="notifications-toggle-info">
+                  <span className="notifications-toggle-title">Incoming Mail Chime</span>
+                  <span className="notifications-toggle-desc">Play a crisp two-tone celestial sound when new mail arrives</span>
+                </div>
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    checked={notifPrefs.soundEnabled}
+                    onChange={e => handleUpdateNotifPref('soundEnabled', e.target.checked)}
+                  />
+                  <span className="slider round"></span>
+                </label>
+              </div>
+
+              <div style={{ marginTop: '8px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <button type="button" onClick={handleTestChime} style={{ minHeight: '38px', padding: '6px 14px' }}>
+                  Test Audio Chime 🔊
+                </button>
+              </div>
             </div>
           </div>
         </div>

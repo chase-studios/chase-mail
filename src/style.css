@@ -1231,3 +1231,152 @@ body.gold-trim button:not(.side):not(.link):not(.danger-btn) {
     grid-template-columns: 1fr 1fr !important;
   }
 }
+
+/* ============================================================
+   Chase Mail Notification & Alert Engine
+   ============================================================ */
+.notification-prompt-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(90deg, rgba(35, 18, 54, 0.95), rgba(18, 12, 30, 0.95));
+  border-bottom: 1px solid rgba(134, 72, 235, 0.35);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  padding: 10px 16px;
+  font-size: 0.88rem;
+  color: #e5d9f2;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  backdrop-filter: blur(8px);
+}
+.notification-prompt-banner button.enable-btn {
+  background: linear-gradient(135deg, #8648eb, #632bd6);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(134, 72, 235, 0.4);
+}
+.notification-prompt-banner button.dismiss-btn {
+  background: transparent;
+  border: none;
+  color: #a89bb8;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 4px;
+}
+
+/* In-App Floating Toast Alert */
+.in-app-toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 360px;
+  width: calc(100% - 40px);
+  pointer-events: none;
+}
+.in-app-toast {
+  pointer-events: auto;
+  background: rgba(20, 13, 33, 0.96);
+  border: 1px solid rgba(134, 72, 235, 0.5);
+  border-left: 4px solid #8648eb;
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 16px rgba(134, 72, 235, 0.3);
+  backdrop-filter: blur(12px);
+  animation: slideInToast 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+@keyframes slideInToast {
+  from {
+    transform: translateY(-20px) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+.in-app-toast-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.in-app-toast-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #ffd700;
+}
+.in-app-toast-body {
+  font-size: 0.85rem;
+  color: #f1edff;
+  line-height: 1.35;
+}
+.in-app-toast-preview {
+  font-size: 0.78rem;
+  color: #9f8bb8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.in-app-toast-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.in-app-toast-btn {
+  background: rgba(134, 72, 235, 0.25);
+  border: 1px solid rgba(134, 72, 235, 0.5);
+  color: #e5d9f2;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.in-app-toast-btn:hover {
+  background: rgba(134, 72, 235, 0.5);
+  color: #fff;
+}
+
+/* Settings Notifications Grid */
+.notifications-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.notifications-toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.notifications-toggle-title {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: #f3e8ff;
+}
+.notifications-toggle-desc {
+  font-size: 0.78rem;
+  color: #a89bb8;
+}
+

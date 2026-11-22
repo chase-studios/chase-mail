@@ -1,4 +1,4 @@
-const CACHE = 'chase-mail-v10-custom-icon-v3';
+const CACHE = 'chase-mail-v10-notifs-v1';
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c =>
@@ -31,4 +31,20 @@ self.addEventListener('fetch', e => {
   if (req.mode === 'navigate') {
     e.respondWith(fetch(req).catch(() => caches.match('/')));
   }
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
+    })
+  );
 });
