@@ -68,27 +68,31 @@ export function saveRegistrationCodes(codes: Record<AccountTier, RegistrationCod
 export function validateRegistrationCode(
   enteredCode: string,
   desiredTier: AccountTier
-): { valid: boolean; role: AccountRole; error?: string } {
-  // Community Edition is publicly available by default
-  if (desiredTier === 'community' && (!enteredCode || enteredCode.trim() === '')) {
-    return { valid: true, role: 'user' };
-  }
-
+): { valid: boolean; role: AccountRole; matchedTier?: AccountTier; error?: string } {
   const clean = enteredCode.trim().toUpperCase();
   const currentCodes = getRegistrationCodes();
+
+  // 1. Direct match for desired tier
   const targetDef = currentCodes[desiredTier];
-
-  if (!targetDef || !targetDef.active) {
-    return { valid: false, role: 'user', error: `Registration for ${desiredTier} edition is currently paused.` };
+  if (targetDef && targetDef.active && clean === targetDef.code.toUpperCase()) {
+    return { valid: true, role: targetDef.role, matchedTier: desiredTier };
   }
 
-  if (clean === targetDef.code.toUpperCase()) {
-    return { valid: true, role: targetDef.role };
-  }
-
-  // Super Admin universal authorization key
+  // 2. Super Admin universal authorization key
   if (clean === 'CHASE-STUDIOS-SUPERADMIN-2026' || clean === 'CHASE-STUDIOS-ADMIN-2026') {
-    return { valid: true, role: 'super_admin' };
+    return { valid: true, role: 'super_admin', matchedTier: desiredTier };
+  }
+
+  // 3. Cross-tier match: if user selected a different tier by accident, auto-resolve to the code's tier!
+  for (const [tier, def] of Object.entries(currentCodes)) {
+    if (def.active && clean === def.code.toUpperCase()) {
+      return { valid: true, role: def.role, matchedTier: tier as AccountTier };
+    }
+  }
+
+  // 4. Community Edition is publicly available if no code entered
+  if (desiredTier === 'community' && (!enteredCode || enteredCode.trim() === '')) {
+    return { valid: true, role: 'user', matchedTier: 'community' };
   }
 
   return {

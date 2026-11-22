@@ -380,13 +380,17 @@ function App() {
     if (!db) return;
     setBusy(true);
 
+    let effectiveTier = registerTier;
     const tierDef = getTier(registerTier);
-    if (tierDef.isProtected) {
+    if (tierDef.isProtected || accessCode.trim()) {
       const codeValidation = validateRegistrationCode(accessCode, registerTier);
       if (!codeValidation.valid) {
         setBusy(false);
         setNotice(codeValidation.error || 'Invalid registration access code for this edition.');
         return;
+      }
+      if (codeValidation.matchedTier) {
+        effectiveTier = codeValidation.matchedTier;
       }
     }
 
@@ -403,7 +407,7 @@ function App() {
       const fourParamRes = await db.rpc('register_chase_mail_account', {
         p_handle: handle.trim(),
         p_display_name: name.trim(),
-        p_edition: registerTier,
+        p_edition: effectiveTier,
         p_access_code: accessCode.trim()
       });
       finalError = fourParamRes.error;
@@ -415,9 +419,9 @@ function App() {
         user_id: session.user.id,
         handle: handle.trim().toLowerCase(),
         display_name: name.trim(),
-        edition: registerTier,
-        gold_trim: registerTier === 'royal' || registerTier === 'studio',
-        is_admin: registerTier === 'studio'
+        edition: effectiveTier,
+        gold_trim: effectiveTier === 'royal' || effectiveTier === 'studio',
+        is_admin: effectiveTier === 'studio'
       });
       if (!insertErr) {
         finalError = null;
@@ -426,14 +430,14 @@ function App() {
       // Ensure edition and gold trim are saved on the new account
       try {
         await db.from('mail_accounts').update({
-          edition: registerTier,
-          gold_trim: registerTier === 'royal' || registerTier === 'studio'
+          edition: effectiveTier,
+          gold_trim: effectiveTier === 'royal' || effectiveTier === 'studio'
         }).eq('user_id', session.user.id);
       } catch {}
     }
 
     setBusy(false);
-    setNotice(finalError?.message || 'Chase Mail account created.');
+    setNotice(finalError?.message || `Chase Mail ${getTier(effectiveTier).displayName} inbox created.`);
     if (!finalError && session) {
       await refresh(session.user.id);
     }
@@ -968,10 +972,33 @@ function App() {
                       key={t.id}
                       className={`registration-tier-card ${isSelected ? 'selected' : ''}`}
                       onClick={() => setRegisterTier(t.id)}
+                      style={{
+                        position: 'relative',
+                        border: isSelected ? '2px solid #d4af37' : '1px solid #4a3361',
+                        background: isSelected ? '#2b183f' : '#191024'
+                      }}
                     >
+                      {isSelected && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '-7px',
+                            right: '6px',
+                            background: '#d4af37',
+                            color: '#07050d',
+                            fontSize: '0.62rem',
+                            fontWeight: 900,
+                            padding: '1px 6px',
+                            borderRadius: '8px',
+                            letterSpacing: '0.04em'
+                          }}
+                        >
+                          ✓ SELECTED
+                        </div>
+                      )}
                       <div className="tier-card-header">
                         <span className={`edition-badge ${t.id}`}>{t.displayName}</span>
-                        {t.isProtected && <span style={{ fontSize: '0.75rem', color: '#ffd700' }}>🔒 Access Code</span>}
+                        {t.isProtected && <span style={{ fontSize: '0.72rem', color: '#ffd700' }}>🔒 Code</span>}
                       </div>
                       <div className="tier-card-desc">{t.description}</div>
                       <div className="tier-card-domain">{plannedAddress(handle || 'yourname', t.id)}</div>
@@ -990,7 +1017,21 @@ function App() {
                 <input
                   required
                   value={accessCode}
-                  onChange={e => setAccessCode(e.target.value.trim())}
+                  onChange={e => {
+                    const val = e.target.value.trim();
+                    setAccessCode(val);
+                    // Seamlessly auto-switch selected tier if user enters code for another tier
+                    const clean = val.toUpperCase();
+                    if (clean === 'ROYAL-CHASE-2026' && registerTier !== 'royal') {
+                      setRegisterTier('royal');
+                    } else if (clean === 'VANGUARD-CHASE-2026' && registerTier !== 'vanguard') {
+                      setRegisterTier('vanguard');
+                    } else if (clean === 'PRIME-CHASE-2026' && registerTier !== 'prime') {
+                      setRegisterTier('prime');
+                    } else if (clean === 'STUDIO-EXEC-2026' && registerTier !== 'studio') {
+                      setRegisterTier('studio');
+                    }
+                  }}
                   placeholder={`Enter ${getTier(registerTier).displayName} registration code`}
                   style={{ border: '1px solid rgba(212, 175, 55, 0.4)', background: 'rgba(212, 175, 55, 0.05)' }}
                 />
