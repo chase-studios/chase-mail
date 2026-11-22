@@ -1,4 +1,4 @@
-const CACHE = 'chase-mail-v10-app-icons-v2';
+const CACHE = 'chase-mail-v10-custom-icon-v3';
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c =>

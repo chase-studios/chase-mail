@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="bgGrad" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#2a1245"/>
+      <stop offset="45%" stop-color="#140a24"/>
+      <stop offset="100%" stop-color="#080310"/>
+    </radialGradient>
+
+    <!-- Border Glow -->
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc"/>
+      <stop offset="50%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+
+    <!-- Envelope Flap Gradient -->
+    <linearGradient id="flapGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9333ea"/>
+      <stop offset="50%" stop-color="#7928ca"/>
+      <stop offset="100%" stop-color="#581c87"/>
+    </linearGradient>
+
+    <!-- Envelope Lower Fold Gradient -->
+    <linearGradient id="bodyGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1e1035"/>
+      <stop offset="50%" stop-color="#2c164d"/>
+      <stop offset="100%" stop-color="#3b1766"/>
+    </linearGradient>
+
+    <!-- Cyan Neon Accent -->
+    <linearGradient id="neonCyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="50%" stop-color="#22d3ee"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+
+    <linearGradient id="goldSeal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="50%" stop-color="#d4af37"/>
+      <stop offset="100%" stop-color="#a16207"/>
+    </linearGradient>
+
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <filter id="dropShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000000" flood-opacity="0.8"/>
+    </filter>
+  </defs>
+
+  <!-- iOS App Icon Squircle Base -->
+  <rect width="512" height="512" rx="116" fill="url(#bgGrad)"/>
+  <rect x="3" y="3" width="506" height="506" rx="114" fill="none" stroke="url(#borderGrad)" stroke-width="5" opacity="0.45"/>
+
+  <!-- Cosmic Nebula Backlight -->
+  <circle cx="256" cy="256" r="150" fill="#7e22ce" opacity="0.3" filter="url(#softGlow)"/>
+
+  <!-- Dimensional Mail Envelope -->
+  <g filter="url(#dropShadow)">
+    <!-- Base Envelope Body -->
+    <rect x="80" y="148" width="352" height="236" rx="26" fill="url(#bodyGrad)" stroke="#4a2175" stroke-width="4"/>
+
+    <!-- Bottom Triangular Folds -->
+    <path d="M 80 376 L 232 264 C 246 254 266 254 280 264 L 432 376 Z" fill="#140a24" opacity="0.85"/>
+    <path d="M 80 380 L 234 266 C 248 256 264 256 278 266 L 432 380" fill="none" stroke="url(#neonCyan)" stroke-width="4.5" stroke-linecap="round"/>
+
+    <!-- Side Pocket Folds -->
+    <path d="M 80 156 L 222 266 C 230 272 236 280 236 290 L 236 380 L 80 380 Z" fill="#25123d" opacity="0.6"/>
+    <path d="M 432 156 L 290 266 C 282 272 276 280 276 290 L 276 380 L 432 380 Z" fill="#2c1449" opacity="0.6"/>
+
+    <!-- Glowing Top Envelope Flap -->
+    <path d="M 82 154 L 238 274 C 249 283 263 283 274 274 L 430 154 C 424 148 412 144 402 144 L 110 144 C 100 144 88 148 82 154 Z" fill="url(#flapGrad)" stroke="#a855f7" stroke-width="3"/>
+    
+    <!-- Flap Neon Accent Edge -->
+    <path d="M 94 158 L 244 274 C 251 280 261 280 268 274 L 418 158" fill="none" stroke="url(#neonCyan)" stroke-width="3" stroke-linecap="round" filter="url(#softGlow)"/>
+
+    <!-- Celestial Wax Seal: Chase Cosmic Star -->
+    <g transform="translate(256, 276)">
+      <!-- Outer Seal Ring -->
+      <circle cx="0" cy="0" r="34" fill="#0c0517" stroke="url(#borderGrad)" stroke-width="3.5" filter="url(#softGlow)"/>
+      <circle cx="0" cy="0" r="26" fill="#1b0b2e" stroke="#6b21a8" stroke-width="2"/>
+      
+      <!-- Central Glowing Chase Star Emblem -->
+      <path d="M 0 -17 L 4.5 -5 L 17 -4.5 L 7 4 L 10 16 L 0 9 L -10 16 L -7 4 L -17 -4.5 L -4.5 -5 Z" fill="url(#neonCyan)" filter="url(#softGlow)"/>
+      <circle cx="0" cy="0" r="3.5" fill="#ffffff"/>
+    </g>
+
+    <!-- Floating Top Postal Wing Wings / Horizon Crest -->
+    <path d="M 170 114 L 256 70 L 342 114" fill="none" stroke="url(#neonCyan)" stroke-width="4.5" stroke-linecap="round" opacity="0.9" filter="url(#softGlow)"/>
+    <!-- Central Astral Diamond -->
+    <polygon points="256,52 263,68 256,80 249,68" fill="#38bdf8"/>
+  </g>
+</svg>
