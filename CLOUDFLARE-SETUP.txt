@@ -1,0 +1,9 @@
+Chase Mail Cloudflare Pages migration source snapshot
+
+IMPORTANT: This is SOURCE CODE, not a compiled Cloudflare upload. Do not upload this ZIP to the Pages drag-and-drop deploy screen.
+
+This snapshot predates later Vercel-only changes including Bulk Update 5 and Royal UI. Those later changes need to be reconciled before cutover. Do not point mail.chase-studios.org to this build without testing.
+
+Recommended: connect a Git repository with the complete latest source. Pages build command: npm run build; output directory: dist; root directory: /.
+
+Supabase project remains unchanged. Test sign-in, Royal invitation, cloud drafts, folders, and PWA before changing DNS.
