@@ -147,7 +147,7 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
     // Check if recipient is external
     const isExternal =
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientInput) &&
-      !['chasemail.com', 'chaseprime.com', 'chasevanguard.com', 'chasestudios.org'].some(d =>
+      !['chasemail.com', 'chaseprime.com', 'chasevanguard.com', 'chase-studios.org', 'chasestudios.org'].some(d =>
         recipientInput.endsWith(`@${d}`)
       );
 
@@ -197,10 +197,12 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
       return;
     }
 
-    // Internal recipient matching
+    // Internal recipient matching (supports raw handle, handle@domain, or planned address)
+    const cleanHandle = recipientInput.split('@')[0].toLowerCase();
     const internalAcc = accounts.find(
       a =>
         a.handle.toLowerCase() === recipientInput ||
+        a.handle.toLowerCase() === cleanHandle ||
         plannedAddress(a.handle, a.edition).toLowerCase() === recipientInput
     );
 

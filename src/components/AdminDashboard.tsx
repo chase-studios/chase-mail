@@ -609,7 +609,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     value={execTier}
                     onChange={e => setExecTier(e.target.value as AccountTier)}
                   >
-                    <option value="studio">Studio Edition (@chasestudios.org)</option>
+                    <option value="studio">Studio Edition (@chase-studios.org)</option>
                     <option value="royal">Royal Edition (@chasemail.com)</option>
                     <option value="vanguard">Vanguard Edition (@chasevanguard.com)</option>
                     <option value="prime">Prime Edition (@chaseprime.com)</option>
