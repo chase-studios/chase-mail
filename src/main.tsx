@@ -1502,6 +1502,18 @@ function App() {
         </div>
       )}
 
+      {/* Floating Action Button (FAB) for Mobile Compose */}
+      {session && account && (
+        <button
+          className="mobile-compose-fab"
+          onClick={handleOpenNewCompose}
+          title="Compose new message"
+          aria-label="Compose new message"
+        >
+          ✎
+        </button>
+      )}
+
       {/* Compose Modal */}
       {composeOpen && session && account && (
         <ComposeModal

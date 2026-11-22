@@ -1019,3 +1019,215 @@ body.gold-trim button:not(.side):not(.link):not(.danger-btn) {
   font-size: 10px;
   color: #b7a4cb;
 }
+
+/* ============================================================
+   CHASE MAIL — ENHANCED MOBILE & TOUCH OPTIMIZATIONS
+   ============================================================ */
+
+/* Mobile Compose Floating Action Button (FAB) */
+.mobile-compose-fab {
+  display: none;
+  position: fixed;
+  bottom: 24px;
+  right: 20px;
+  width: 58px;
+  height: 58px;
+  border-radius: 29px;
+  background: linear-gradient(135deg, var(--custom-accent, #9c4dff), #7928ca);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.55), 0 0 16px rgba(156, 77, 255, 0.4);
+  font-size: 26px;
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 95;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-compose-fab:active {
+  transform: scale(0.92);
+}
+
+@media (max-width: 768px) {
+  /* Prevent iOS Safari automatic zoom on inputs */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+
+  /* Header Compactness */
+  header {
+    padding: 10px 14px !important;
+    gap: 8px !important;
+  }
+  .brand {
+    font-size: 17px !important;
+  }
+  .brand-logo-img {
+    width: 26px !important;
+    height: 26px !important;
+  }
+  header .tag {
+    display: none !important;
+  }
+  .theme-picker {
+    font-size: 11px !important;
+  }
+  .theme-picker select {
+    padding: 4px 6px !important;
+    font-size: 12px !important;
+  }
+
+  /* Mobile Auth View: Hero is compact and does NOT push login off-screen */
+  .auth-container {
+    flex-direction: column !important;
+    padding: 12px 14px 28px !important;
+    gap: 12px !important;
+    min-height: auto !important;
+  }
+  .hero {
+    max-width: 100% !important;
+    margin-bottom: 0 !important;
+  }
+  .hero .symbol {
+    width: 54px !important;
+    height: 54px !important;
+    margin-bottom: 6px !important;
+  }
+  .hero .eyebrow {
+    font-size: 9px !important;
+    letter-spacing: 0.18em !important;
+    margin-bottom: 3px !important;
+  }
+  .hero h1 {
+    font-size: 21px !important;
+    margin: 0 0 3px !important;
+    line-height: 1.2 !important;
+  }
+  .hero p {
+    font-size: 12.5px !important;
+    line-height: 1.35 !important;
+  }
+  .panel.auth {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 18px 16px !important;
+    border-radius: 16px !important;
+  }
+
+  /* Mailbox Layout & Aside Horizontal Folder Navigation */
+  .layout {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  aside {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    padding: 10px 12px !important;
+    gap: 8px !important;
+    background: #171022 !important;
+    border-right: none !important;
+    border-bottom: 1px solid #38254c !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 20 !important;
+  }
+  aside::-webkit-scrollbar {
+    display: none !important;
+  }
+  aside .identity {
+    display: none !important;
+  }
+  aside button.side {
+    flex: 0 0 auto !important;
+    padding: 8px 14px !important;
+    border-radius: 20px !important;
+    font-size: 12px !important;
+    white-space: nowrap !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #e2d9f3 !important;
+  }
+  aside button.side.active {
+    background: var(--custom-accent, #8648eb) !important;
+    color: #ffffff !important;
+    border-color: var(--custom-accent, #8648eb) !important;
+    font-weight: 700 !important;
+  }
+  aside button.side[style*="font-weight: 700"] {
+    display: none !important; /* In-aside compose button hidden on mobile; use FAB instead */
+  }
+
+  /* Show Mobile Compose FAB */
+  .mobile-compose-fab {
+    display: flex !important;
+  }
+
+  /* Content & Message List */
+  .content {
+    padding: 14px 12px 80px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .content h1 {
+    font-size: 22px !important;
+    margin-bottom: 14px !important;
+  }
+  .messages {
+    gap: 8px !important;
+  }
+  .message {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+    padding: 12px 14px !important;
+    border-radius: 12px !important;
+    min-height: 48px !important;
+  }
+  .message > div:first-child {
+    display: flex !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+  }
+
+  /* Modals: Fullscreen on mobile */
+  .compose-modal-overlay, .modal-overlay {
+    padding: 0 !important;
+  }
+  .compose-modal-card, .preview-modal-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
+    border: none !important;
+  }
+  .compose-modal-body textarea {
+    min-height: 250px !important;
+  }
+
+  /* Mobile Touch Targets */
+  button, .link {
+    min-height: 42px !important;
+    touch-action: manipulation;
+  }
+
+  /* Notification Toast on Mobile */
+  .notice {
+    left: 12px !important;
+    right: 12px !important;
+    bottom: 84px !important;
+    max-width: calc(100% - 24px) !important;
+  }
+
+  /* Registration Tier Cards on Mobile */
+  .registration-tier-cards {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
