@@ -621,7 +621,7 @@ function App() {
     <div className="shell">
       <header>
         <div className="brand">
-          <span className="mark">✦</span>
+          <img src="/chase-studios-logo.svg" alt="Chase Studios" className="brand-logo-img" />
           <span>
             CHASE <b>MAIL</b>
           </span>
@@ -649,69 +649,86 @@ function App() {
           </p>
         </main>
       ) : !session ? (
-        <main className="panel auth">
-          <h1>{resetMode ? 'Reset your password' : 'Welcome to Chase Mail'}</h1>
-          <p>Your Chase Studios inbox starts here.</p>
-          <form
-            onSubmit={e => {
-              e.preventDefault();
-              void (resetMode ? resetPassword() : auth());
-            }}
-          >
-            <label>
-              Existing email address
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-            </label>
-            {!resetMode && (
-              <label>
-                Password
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                />
-              </label>
-            )}
-            <button disabled={busy}>
+        <div className="auth-container">
+          <div className="hero">
+            <div className="symbol">
+              <img src="/chase-studios-logo.svg" alt="Chase Studios" className="hero-logo-img" />
+            </div>
+            <div className="eyebrow">A CHASE STUDIOS EXPERIENCE</div>
+            <h1>
+              Your inbox. <span className="gradient-text">Your universe.</span>
+            </h1>
+            <p>More than messages. Your creative universe, connected.</p>
+          </div>
+
+          <main className="panel auth">
+            <h1>{resetMode ? 'Reset your password' : 'Welcome to Chase Mail'}</h1>
+            <p>
               {resetMode
-                ? 'Send reset link'
-                : mode === 'login'
-                ? 'Sign in'
-                : 'Create account'}
-            </button>
-            <button
-              type="button"
-              className="link"
-              onClick={() => {
-                setResetMode(!resetMode);
-                setNotice('');
+                ? 'Enter your email to receive a recovery link.'
+                : 'Sign in or create your account to get started.'}
+            </p>
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                void (resetMode ? resetPassword() : auth());
               }}
             >
-              {resetMode ? 'Back to sign in' : 'Forgot password?'}
-            </button>
-            {!resetMode && (
+              <label>
+                Existing email address
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+              </label>
+              {!resetMode && (
+                <label>
+                  Password
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                  />
+                </label>
+              )}
+              <button disabled={busy}>
+                {resetMode
+                  ? 'Send reset link'
+                  : mode === 'login'
+                  ? 'Sign in'
+                  : 'Create account'}
+              </button>
               <button
                 type="button"
                 className="link"
                 onClick={() => {
-                  setMode(mode === 'login' ? 'signup' : 'login');
+                  setResetMode(!resetMode);
                   setNotice('');
                 }}
               >
-                {mode === 'login'
-                  ? 'Need an account? Sign up'
-                  : 'Already have an account? Sign in'}
+                {resetMode ? 'Back to sign in' : 'Forgot password?'}
               </button>
-            )}
-          </form>
-        </main>
+              {!resetMode && (
+                <button
+                  type="button"
+                  className="link"
+                  onClick={() => {
+                    setMode(mode === 'login' ? 'signup' : 'login');
+                    setNotice('');
+                  }}
+                >
+                  {mode === 'login'
+                    ? 'Need an account? Sign up'
+                    : 'Already have an account? Sign in'}
+                </button>
+              )}
+            </form>
+          </main>
+        </div>
       ) : !account ? (
         <main className="panel auth">
           <h1>Set up your Chase Mail address</h1>
