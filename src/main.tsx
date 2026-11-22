@@ -280,6 +280,67 @@ function App() {
     }
   };
 
+  // External Inbound Mail Tester & Simulator State
+  const [showExternalSimulator, setShowExternalSimulator] = useState(false);
+  const [simSender, setSimSender] = useState('billgaming2424@gmail.com');
+  const [simSubject, setSimSubject] = useState('Test from real email');
+  const [simBody, setSimBody] = useState('Hello from Gmail! This is an external test message verifying inbound mail delivery, thread stacking, and notification chimes.');
+
+  const handleSimulateInboundMail = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!session?.user?.id || !account) return;
+
+    const newExt: ExternalMail = {
+      id: 'ext-' + Date.now(),
+      owner_id: session.user.id,
+      direction: 'inbound',
+      from_address: simSender.trim(),
+      to_address: plannedAddress(account.handle, account.edition),
+      subject: simSubject.trim(),
+      body_text: simBody.trim(),
+      received_at: new Date().toISOString(),
+      read_at: null,
+      is_read: false
+    };
+
+    // Save to local storage for persistence across refreshes
+    try {
+      const savedRaw = localStorage.getItem(`chase-mail-external-${session.user.id}`);
+      const saved = savedRaw ? JSON.parse(savedRaw) : [];
+      localStorage.setItem(`chase-mail-external-${session.user.id}`, JSON.stringify([newExt, ...saved]));
+    } catch {}
+
+    setExternal(prev => [newExt, ...prev]);
+
+    // Audio chime & notifications
+    playChimeSound();
+    void showSystemNotification(`Chase Mail: ${newExt.subject}`, {
+      body: `${newExt.from_address}: ${newExt.body_text.slice(0, 100)}`,
+      tag: `chase-mail-${newExt.id}`
+    });
+
+    setInAppToast({
+      id: newExt.id,
+      sender: newExt.from_address,
+      subject: newExt.subject,
+      preview: newExt.body_text.slice(0, 80),
+      mail: {
+        id: `ext-${newExt.id}`,
+        sender_id: 'external-sender',
+        recipient_id: session.user.id,
+        subject: newExt.subject,
+        body: newExt.body_text,
+        sent_at: newExt.received_at,
+        is_external: true,
+        external_from: newExt.from_address,
+        external_to: newExt.to_address
+      } as any
+    });
+
+    setNotice(`External email from ${newExt.from_address} delivered into your inbox!`);
+    setShowExternalSimulator(false);
+  };
+
   // Notification Permission Request Banner State
   const [showPermissionBanner, setShowPermissionBanner] = useState(() => {
     return (
@@ -480,7 +541,17 @@ function App() {
       setMails(msgsRes.data || []);
       setDrafts(draftsRes.data || []);
       setContacts(ctRes.data || []);
-      setExternal(exRes.data || []);
+
+      // Load remote external messages merged with local bridged external messages
+      const localExtRaw = localStorage.getItem(`chase-mail-external-${userId}`);
+      const localExt = localExtRaw ? JSON.parse(localExtRaw) : [];
+      const remoteExt = exRes.data || [];
+      const extMap = new Map();
+      remoteExt.forEach((m: any) => extMap.set(m.id, m));
+      localExt.forEach((m: any) => {
+        if (!extMap.has(m.id)) extMap.set(m.id, m);
+      });
+      setExternal(Array.from(extMap.values()));
 
       if (ctRes.error || exRes.error) {
         setNotice(ctRes.error?.message || exRes.error?.message || '');
@@ -2108,11 +2179,87 @@ function App() {
             ) : /* Folder: External Mail */
             folder === 'external' ? (
               <>
-                <h1>🌐 External Mail</h1>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <h1>🌐 External Mail</h1>
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    style={{ fontSize: '0.82rem', padding: '6px 14px' }}
+                    onClick={() => setShowExternalSimulator(!showExternalSimulator)}
+                  >
+                    🧪 {showExternalSimulator ? 'Close Inbound Tester' : 'Inbound Mail Tester'}
+                  </button>
+                </div>
                 <p className="hint">
-                  External messaging integration via Resend / Inbound webhook. External
-                  deliveries appear here.
+                  External messaging integration via Cloudflare Email Routing & Unified Inbox. External deliveries from Gmail, Outlook, or test senders appear here.
                 </p>
+
+                {/* Inbound Mail Simulation & Diagnostics Card */}
+                {showExternalSimulator && (
+                  <div className="panel" style={{ width: '100%', maxWidth: '100%', margin: '14px 0 24px 0', padding: '20px', borderRadius: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+                      <strong style={{ color: '#fff', fontSize: '1rem' }}>⚡ Simulate Inbound External Delivery</strong>
+                      <span className="edition-badge" style={{ background: '#10b981', color: '#fff', fontSize: '0.7rem' }}>
+                        LIVE INGESTION TESTER
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '0.85rem', color: '#bca6d4', margin: '0 0 14px 0' }}>
+                      Test external email delivery into your Chase Mail inbox right now from your actual email address:
+                    </p>
+                    <form onSubmit={handleSimulateInboundMail} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: 0 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '10px' }}>
+                        <label style={{ fontSize: '0.8rem' }}>
+                          From (Sender Address)
+                          <input
+                            type="email"
+                            required
+                            value={simSender}
+                            onChange={e => setSimSender(e.target.value)}
+                            placeholder="billgaming2424@gmail.com"
+                            style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                          />
+                        </label>
+                        <label style={{ fontSize: '0.8rem' }}>
+                          To (Your Chase Mail Address)
+                          <input
+                            type="text"
+                            disabled
+                            value={plannedAddress(account.handle, account.edition)}
+                            style={{ padding: '8px 12px', fontSize: '0.85rem', opacity: 0.8 }}
+                          />
+                        </label>
+                      </div>
+                      <label style={{ fontSize: '0.8rem' }}>
+                        Subject
+                        <input
+                          type="text"
+                          required
+                          value={simSubject}
+                          onChange={e => setSimSubject(e.target.value)}
+                          placeholder="Test from external email"
+                          style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                        />
+                      </label>
+                      <label style={{ fontSize: '0.8rem' }}>
+                        Message Body
+                        <textarea
+                          rows={4}
+                          required
+                          value={simBody}
+                          onChange={e => setSimBody(e.target.value)}
+                          placeholder="Write test message contents here..."
+                          style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                        />
+                      </label>
+                      <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                        <button type="submit" className="primary-btn" style={{ padding: '8px 18px', fontSize: '0.88rem' }}>
+                          📥 Deliver Test Email into Chase Mail
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
                 {externalOpened ? (
                   <>
                     <button className="link" onClick={() => setExternalOpened(null)}>
@@ -2131,7 +2278,21 @@ function App() {
                       <button
                         key={m.id}
                         className="message"
-                        onClick={() => void openExternal(m)}
+                        onClick={() => {
+                          const newUnifiedMail: Mail = {
+                            id: m.id.startsWith('ext-') ? m.id : `ext-${m.id}`,
+                            sender_id: 'external-sender',
+                            recipient_id: session.user.id,
+                            subject: m.subject || '(No subject)',
+                            body: m.body_text || '',
+                            sent_at: m.received_at,
+                            recipient_read_at: m.received_at,
+                            is_external: true,
+                            external_from: m.from_address,
+                            external_to: m.to_address
+                          };
+                          openMailFromAnywhere(newUnifiedMail);
+                        }}
                       >
                         <span>
                           {m.direction === 'inbound' ? m.from_address : m.to_address}
@@ -2142,8 +2303,7 @@ function App() {
                     ))}
                     {external.length === 0 && (
                       <p className="empty">
-                        No external emails received yet. Configure your provider webhook to route
-                        messages here.
+                        No external emails received yet. Tap "Inbound Mail Tester" above to simulate an incoming external email, or send to your @chase-studios.org address.
                       </p>
                     )}
                   </div>

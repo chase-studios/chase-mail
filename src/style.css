@@ -2959,3 +2959,318 @@ body.gold-trim button:not(.side):not(.link):not(.danger-btn) {
   border: 1px solid rgba(134, 72, 235, 0.3);
   color: #e9d5ff;
 }
+
+/* ==========================================================================
+   Responsive Screen & Viewport Guard: Fix Mail Screen Cut-off (Mobile & Desktop)
+   ========================================================================== */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100% !important;
+  max-width: 100vw !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+  -webkit-text-size-adjust: 100%;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box !important;
+}
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  width: 100% !important;
+  max-width: 100vw !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.layout {
+  display: grid !important;
+  grid-template-columns: 240px minmax(0, 1fr) !important;
+  flex: 1;
+  width: 100% !important;
+  max-width: 100vw !important;
+  min-width: 0 !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.content {
+  padding: 28px 24px 80px;
+  max-width: 1000px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 auto;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+
+/* Ensure message list items fit viewport cleanly */
+.messages {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.message {
+  display: grid !important;
+  grid-template-columns: minmax(110px, 1.2fr) minmax(140px, 2.5fr) auto !important;
+  gap: 12px !important;
+  align-items: center !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+.message > * {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Message Detail View: prevent email clipping */
+.message-detail-view {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+}
+
+.detail-header-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+.detail-title-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+.detail-title-row h1 {
+  margin: 0 !important;
+  font-size: clamp(1.2rem, 3.5vw, 1.55rem) !important;
+  color: #f7f2ff !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  min-width: 0 !important;
+  flex: 1 1 200px !important;
+}
+
+.detail-meta-grid {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+.meta-field {
+  flex-wrap: wrap !important;
+  min-width: 0 !important;
+}
+
+.meta-value {
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  min-width: 0 !important;
+}
+
+/* Email Body & Paragraph Rendering */
+article, .detail-body-container {
+  white-space: pre-wrap !important;
+  line-height: 1.7 !important;
+  background: #21182d !important;
+  border-radius: 12px !important;
+  padding: 20px !important;
+  margin: 16px 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  overflow-x: auto !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+.message-body-content {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  box-sizing: border-box !important;
+}
+
+.message-line {
+  margin: 6px 0 !important;
+  line-height: 1.6 !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+.quoted-line {
+  border-left: 3px solid #8e54d6 !important;
+  padding-left: 12px !important;
+  margin: 6px 0 !important;
+  color: #b5a4ca !important;
+  font-style: italic !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* Stacked Thread Cards */
+.conversation-thread-stack {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.thread-card {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+.thread-card-header {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  flex-wrap: wrap !important;
+  box-sizing: border-box !important;
+}
+
+.thread-card-body-section {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+}
+
+.quick-reply-box {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.delivery-status-tracker {
+  flex-wrap: wrap !important;
+  gap: 12px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.detected-event-banner {
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* Responsive screen adaptation for all devices up to 880px */
+@media (max-width: 880px) {
+  .layout {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
+  aside {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    padding: 10px 12px !important;
+    gap: 8px !important;
+    background: #171022 !important;
+    border-right: none !important;
+    border-bottom: 1px solid #38254c !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 20 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+  }
+  aside::-webkit-scrollbar {
+    display: none !important;
+  }
+  aside .identity {
+    display: none !important;
+  }
+  aside button.side {
+    flex: 0 0 auto !important;
+    padding: 8px 14px !important;
+    border-radius: 20px !important;
+    font-size: 12px !important;
+    white-space: nowrap !important;
+  }
+  .content {
+    padding: 16px 12px 80px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .message {
+    grid-template-columns: 1fr auto !important;
+    padding: 14px !important;
+    gap: 8px !important;
+  }
+  .message strong {
+    grid-column: 1/-1 !important;
+    grid-row: 2 !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+  }
+  .message small {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+  }
+  .detail-title-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+  .detail-toolbar {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  .toolbar-actions {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  .icon-action-btn {
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+  }
+}
