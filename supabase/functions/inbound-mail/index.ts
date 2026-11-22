@@ -65,17 +65,38 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Extract handle from toAddress (e.g. "bill@chasemail.com" -> "bill")
-    const handleMatch = toAddress.split('@')[0];
+    // Extract base handle from toAddress (e.g. "bill@chase-studios.org" -> "bill", "bill.exec" -> "bill")
+    const localPart = toAddress.split('@')[0];
+    const baseHandle = localPart.split('.')[0];
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey);
 
     // Look up destination Chase Mail user in mail_accounts
-    const { data: matchedAccount, error: accError } = await adminClient
+    let { data: matchedAccount, error: accError } = await adminClient
       .from('mail_accounts')
       .select('user_id, handle')
-      .ilike('handle', handleMatch)
+      .ilike('handle', localPart)
       .maybeSingle();
+
+    if (!matchedAccount && baseHandle !== localPart) {
+      const fallback = await adminClient
+        .from('mail_accounts')
+        .select('user_id, handle')
+        .ilike('handle', baseHandle)
+        .maybeSingle();
+      if (fallback.data) matchedAccount = fallback.data;
+    }
+
+    // If still not matched, route to primary admin or earliest registered user so no email is ever lost
+    if (!matchedAccount) {
+      const adminAcc = await adminClient
+        .from('mail_accounts')
+        .select('user_id, handle')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (adminAcc.data) matchedAccount = adminAcc.data;
+    }
 
     if (accError || !matchedAccount) {
       // Record unrouted / bounced delivery event
@@ -104,10 +125,12 @@ Deno.serve(async (req) => {
       .insert({
         owner_id: matchedAccount.user_id,
         direction: 'inbound',
+        provider: payload.provider || 'cloudflare',
+        provider_message_id: payload.message_id || payload.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
         from_address: fromAddress,
         to_address: toAddress,
         subject,
-        body_text: bodyText,
+        body_text: bodyText || '(Empty message)',
         received_at: new Date().toISOString()
       })
       .select('id')
@@ -117,18 +140,22 @@ Deno.serve(async (req) => {
       throw insertError;
     }
 
-    // Log delivery event
-    await adminClient.from('mail_delivery_events').insert({
-      owner_id: matchedAccount.user_id,
-      message_id: insertedMsg.id,
-      event_type: 'delivered',
-      details: {
-        to: toAddress,
-        from: fromAddress,
-        subject,
-        delivered_at: new Date().toISOString()
-      }
-    });
+    // Log delivery event (optional audit telemetry)
+    try {
+      await adminClient.from('mail_delivery_events').insert({
+        owner_id: matchedAccount.user_id,
+        message_id: insertedMsg.id,
+        event_type: 'delivered',
+        details: {
+          to: toAddress,
+          from: fromAddress,
+          subject,
+          delivered_at: new Date().toISOString()
+        }
+      });
+    } catch (e) {
+      console.warn('Could not log delivery event telemetry:', e);
+    }
 
     return new Response(JSON.stringify({
       success: true,

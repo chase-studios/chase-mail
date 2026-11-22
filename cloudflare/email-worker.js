@@ -47,6 +47,8 @@ export default {
             from: fromAddress,
             to: toAddress,
             subject: subject,
+            body: rawContent,
+            text: rawContent,
             raw: rawContent
           })
         });
