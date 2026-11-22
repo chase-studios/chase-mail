@@ -11,8 +11,11 @@ import { GmailIntegration } from './components/GmailIntegration';
 import { Account, Mail, Draft, Contact, ExternalMail } from './lib/types';
 import { plannedAddress, getTier } from './lib/tiers';
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const url =
+  import.meta.env.VITE_SUPABASE_URL || 'https://rvetucuqburqnrgoatui.supabase.co';
+const key =
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  'sb_publishable_lObu0hrc0h8j6AaIw4L2_w_Z8P_Q0nD';
 const db = url && key ? createClient(url, key) : null;
 
 export type FolderType =
