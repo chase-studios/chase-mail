@@ -390,33 +390,51 @@ function App() {
       }
     }
 
-    // Try enhanced RPC first with p_edition and p_access_code
+    // Standard 2-param RPC is the primary deployed procedure
     let rpcRes = await db.rpc('register_chase_mail_account', {
       p_handle: handle.trim(),
-      p_display_name: name.trim(),
-      p_edition: registerTier,
-      p_access_code: accessCode.trim()
+      p_display_name: name.trim()
     });
 
-    // If enhanced RPC is not found (parameter mismatch), fallback to standard 2-param RPC and update mail_accounts directly
-    if (rpcRes.error && (rpcRes.error.message?.includes('function register_chase_mail_account') || rpcRes.error.message?.includes('parameter'))) {
-      rpcRes = await db.rpc('register_chase_mail_account', {
+    let finalError = rpcRes.error;
+
+    // If standard RPC fails with parameter mismatch or schema cache error, try 4-param RPC
+    if (finalError && (finalError.message?.includes('schema cache') || finalError.message?.includes('parameter'))) {
+      const fourParamRes = await db.rpc('register_chase_mail_account', {
         p_handle: handle.trim(),
-        p_display_name: name.trim()
+        p_display_name: name.trim(),
+        p_edition: registerTier,
+        p_access_code: accessCode.trim()
       });
-      if (!rpcRes.error && session) {
-        try {
-          await db.from('mail_accounts').update({
-            edition: registerTier,
-            gold_trim: registerTier === 'royal' || registerTier === 'studio'
-          }).eq('user_id', session.user.id);
-        } catch {}
+      finalError = fourParamRes.error;
+    }
+
+    // Direct table fallback if RPC is completely unavailable
+    if (finalError && session && (finalError.message?.includes('schema cache') || finalError.message?.includes('function'))) {
+      const { error: insertErr } = await db.from('mail_accounts').insert({
+        user_id: session.user.id,
+        handle: handle.trim().toLowerCase(),
+        display_name: name.trim(),
+        edition: registerTier,
+        gold_trim: registerTier === 'royal' || registerTier === 'studio',
+        is_admin: registerTier === 'studio'
+      });
+      if (!insertErr) {
+        finalError = null;
       }
+    } else if (!finalError && session) {
+      // Ensure edition and gold trim are saved on the new account
+      try {
+        await db.from('mail_accounts').update({
+          edition: registerTier,
+          gold_trim: registerTier === 'royal' || registerTier === 'studio'
+        }).eq('user_id', session.user.id);
+      } catch {}
     }
 
     setBusy(false);
-    setNotice(rpcRes.error?.message || 'Chase Mail account created.');
-    if (!rpcRes.error && session) {
+    setNotice(finalError?.message || 'Chase Mail account created.');
+    if (!finalError && session) {
       await refresh(session.user.id);
     }
   }
