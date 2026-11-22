@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { Account, Contact, Mail, Draft } from '../lib/types';
+import { Account, Contact, Mail, Draft, AutoResponderConfig } from '../lib/types';
 import { getTier, plannedAddress } from '../lib/tiers';
 import Update10 from '../Update10';
+import { getAutoResponderConfig, saveAutoResponderConfig } from '../lib/autoResponder';
 import {
   getNotificationPreferences,
   saveNotificationPreferences,
@@ -32,7 +33,16 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   onRefresh,
   onSetNotice
 }) => {
-  const [activeTab, setActiveTab] = useState<'security' | 'notifications' | 'personalization' | 'export'>('security');
+  const [activeTab, setActiveTab] = useState<'security' | 'notifications' | 'personalization' | 'autoresponder' | 'export'>('security');
+
+  // Executive Auto-Responder State
+  const [autoResponder, setAutoResponder] = useState<AutoResponderConfig>(() => getAutoResponderConfig());
+
+  const handleSaveAutoResponder = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveAutoResponderConfig(autoResponder);
+    onSetNotice(autoResponder.enabled ? 'Executive Auto-Responder is now ACTIVE!' : 'Auto-Responder disabled.');
+  };
 
   // Notification Preferences State
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences>(() => getNotificationPreferences());
@@ -327,6 +337,12 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
           🎨 Personalization Studio
         </button>
         <button
+          className={'settings-tab-btn ' + (activeTab === 'autoresponder' ? 'active' : '')}
+          onClick={() => setActiveTab('autoresponder')}
+        >
+          🤖 Auto-Responder (OOO)
+        </button>
+        <button
           className={'settings-tab-btn ' + (activeTab === 'export' ? 'active' : '')}
           onClick={() => setActiveTab('export')}
         >
@@ -609,6 +625,69 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
       {activeTab === 'personalization' && (
         <div className="settings-section">
           <Update10 userId={account.user_id} tab="settings" />
+        </div>
+      )}
+
+      {/* Tab: Executive Out-of-Office Auto-Responder */}
+      {activeTab === 'autoresponder' && (
+        <div className="settings-section">
+          <div className="settings-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3>✦ Executive Out-of-Office Auto-Responder</h3>
+              <span className={`status-badge ${autoResponder.enabled ? 'badge-active' : 'badge-inactive'}`}>
+                {autoResponder.enabled ? '● Active' : '○ Disabled'}
+              </span>
+            </div>
+            <p className="hint">
+              Automatically dispatch a professional executive reply to incoming messages when you are in production, recording, or out of office.
+            </p>
+
+            <form onSubmit={handleSaveAutoResponder} className="settings-form">
+              <div className="pref-row">
+                <div>
+                  <strong>Enable Auto-Responder</strong>
+                  <p className="hint">When turned on, incoming senders will receive your automated reply once every 24 hours.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={autoResponder.enabled}
+                  onChange={e => setAutoResponder({ ...autoResponder, enabled: e.target.checked })}
+                />
+              </div>
+
+              <label>
+                Auto-Reply Subject
+                <input
+                  type="text"
+                  value={autoResponder.subject}
+                  onChange={e => setAutoResponder({ ...autoResponder, subject: e.target.value })}
+                  placeholder="[Auto-Reply] Currently in Studio / Production"
+                  disabled={!autoResponder.enabled}
+                />
+              </label>
+
+              <label>
+                Message Body
+                <textarea
+                  rows={8}
+                  value={autoResponder.body}
+                  onChange={e => setAutoResponder({ ...autoResponder, body: e.target.value })}
+                  placeholder="Write your automated out-of-office statement..."
+                  disabled={!autoResponder.enabled}
+                />
+              </label>
+
+              <div className="security-notice" style={{ marginTop: '12px' }}>
+                🛡️ <strong>Loop & Spam Protection:</strong> Auto-replies are capped at 1 reply per sender every 24 hours to prevent recursive mail loops with automated services.
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <button type="submit" className="primary-btn">
+                  Save Auto-Responder Settings
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

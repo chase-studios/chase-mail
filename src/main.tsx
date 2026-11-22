@@ -12,9 +12,11 @@ import { CommandPalette } from './components/CommandPalette';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { SnoozeModal } from './components/SnoozeModal';
 import { DriveVault } from './components/DriveVault';
+import { CalendarView } from './components/CalendarView';
 import { LockShieldModal } from './components/LockShieldModal';
 import { playMailSound } from './lib/soundFx';
-import { Account, Mail, Draft, Contact, ExternalMail, AccountTier, MailLabel, ScheduledMessage } from './lib/types';
+import { Account, Mail, Draft, Contact, ExternalMail, AccountTier, MailLabel, ScheduledMessage, CalendarEvent } from './lib/types';
+import { getAutoResponderConfig, shouldSendAutoReply, recordAutoReplySent } from './lib/autoResponder';
 import { plannedAddress, getTier, TIERS } from './lib/tiers';
 import { validateRegistrationCode } from './lib/accessCodes';
 import {
@@ -42,6 +44,7 @@ export type FolderType =
   | 'sent'
   | 'drafts'
   | 'snoozed'
+  | 'calendar'
   | 'drive'
   | 'archive'
   | 'spam'
@@ -251,6 +254,31 @@ function App() {
 
   // Compose attachments initial
   const [composeInitialAttachments, setComposeInitialAttachments] = useState<any[]>([]);
+
+  // Studio Persona / Alias Switcher
+  const [activeSenderAlias, setActiveSenderAlias] = useState<string>(() => {
+    try {
+      return localStorage.getItem('chase-mail-active-alias') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [showAliasModal, setShowAliasModal] = useState(false);
+  const [customAliasInput, setCustomAliasInput] = useState('');
+
+  // Calendar Event Handler
+  const handleAddCalendarEvent = (event: { title: string; date: string; category: any }) => {
+    try {
+      const saved = localStorage.getItem('chase-mail-calendar-events');
+      const evts: CalendarEvent[] = saved ? JSON.parse(saved) : [];
+      const newEvt: CalendarEvent = { id: 'evt-' + Date.now(), ...event };
+      localStorage.setItem('chase-mail-calendar-events', JSON.stringify([...evts, newEvt]));
+      setNotice(`Milestone "${event.title}" saved to Studio Calendar!`);
+      playMailSound('action');
+    } catch {
+      setNotice('Failed to save calendar event.');
+    }
+  };
 
   // Notification Permission Request Banner State
   const [showPermissionBanner, setShowPermissionBanner] = useState(() => {
@@ -497,6 +525,26 @@ function App() {
             preview: latest.body.slice(0, 80),
             mail: latest
           });
+
+          // Dispatch Executive Auto-Responder if active
+          const responder = getAutoResponderConfig();
+          if (responder.enabled && shouldSendAutoReply(latest.sender_id)) {
+            void (async () => {
+              try {
+                await db.from('mail_messages').insert({
+                  sender_id: userId,
+                  recipient_id: latest.sender_id,
+                  subject: responder.subject,
+                  body: responder.body,
+                  is_html: false
+                });
+                recordAutoReplySent(latest.sender_id);
+                console.log('Executive Auto-Reply dispatched to', latest.sender_id);
+              } catch (e) {
+                console.error('Failed to dispatch auto-reply', e);
+              }
+            })();
+          }
         }
       }
       prevUnreadCountRef.current = unreadInboxMsgs.length;
@@ -1711,8 +1759,26 @@ function App() {
         <div className="layout">
           <aside>
             <div className="identity">
-              <strong>{account.display_name || account.handle}</strong>
-              <small>{plannedAddress(account.handle, account.edition)}</small>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong>{account.display_name || account.handle}</strong>
+                <button
+                  type="button"
+                  className="link"
+                  style={{
+                    fontSize: '0.72rem',
+                    color: '#c084fc',
+                    padding: '2px 8px',
+                    background: 'rgba(192,132,252,0.12)',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(192,132,252,0.3)'
+                  }}
+                  onClick={() => setShowAliasModal(true)}
+                  title="Switch Identity Persona or Add Studio Alias"
+                >
+                  🔄 Persona
+                </button>
+              </div>
+              <small>{activeSenderAlias || plannedAddress(account.handle, account.edition)}</small>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap' }}>
                 <span className={'edition-badge ' + (account.edition ? account.edition.toLowerCase() : 'community')}>
                   {getTier(account.edition).displayName}
@@ -1720,6 +1786,11 @@ function App() {
                 {account.is_admin && (
                   <span className="edition-badge studio" style={{ fontSize: '0.68rem', letterSpacing: '0.05em' }}>
                     👑 {account.admin_role ? account.admin_role.toUpperCase() : 'ADMIN'}
+                  </span>
+                )}
+                {activeSenderAlias && (
+                  <span className="edition-badge" style={{ background: '#2563eb', color: '#fff', fontSize: '0.68rem' }}>
+                    ALIAS ACTIVE
                   </span>
                 )}
               </div>
@@ -1782,6 +1853,17 @@ function App() {
               }}
             >
               ⏰ Snoozed {Object.keys(snoozedMap).length > 0 && `(${Object.keys(snoozedMap).length})`}
+            </button>
+
+            <button
+              className={'side ' + (folder === 'calendar' && !opened ? 'active' : '')}
+              onClick={() => {
+                setFolder('calendar');
+                setOpened(null);
+                setExternalOpened(null);
+              }}
+            >
+              🗓 Calendar
             </button>
 
             <button
@@ -2081,6 +2163,16 @@ function App() {
                   setComposeOpen(true);
                 }}
               />
+            ) : /* Folder: Studio Release & Event Calendar */
+            folder === 'calendar' ? (
+              <CalendarView
+                onComposeEventEmail={eventTitle => {
+                  setComposeInitialSubject('Re: ' + eventTitle);
+                  setComposeInitialTo('');
+                  setComposeInitialBody(`Hi Team,\n\nRegarding our upcoming milestone "${eventTitle}":\n\n`);
+                  setComposeOpen(true);
+                }}
+              />
             ) : /* Message Detail View */
             opened ? (
               <MessageDetail
@@ -2107,6 +2199,7 @@ function App() {
                 onToggleSpam={handleToggleSpam}
                 onSnooze={m => setSnoozeTargetMail(m)}
                 onToggleLabel={handleToggleLabel}
+                onAddEvent={handleAddCalendarEvent}
                 onQuickSend={handleQuickSend}
               />
             ) : /* Standard Mail Folders (Inbox, Starred, Snoozed, Sent, Drafts, Archive, Spam, Trash) */
@@ -2429,6 +2522,7 @@ function App() {
           initialSubject={composeInitialSubject}
           initialBody={composeInitialBody}
           initialAttachments={composeInitialAttachments}
+          activeSenderAlias={activeSenderAlias || undefined}
           onClose={() => {
             setComposeOpen(false);
             setComposeInitialAttachments([]);
@@ -2443,6 +2537,126 @@ function App() {
           onDraftSaved={() => void refresh(session.user.id)}
           onScheduleSend={handleScheduleSend}
         />
+      )}
+
+      {/* Multi-Account Persona / Identity Switcher Modal */}
+      {showAliasModal && account && (
+        <div className="modal-overlay" onClick={() => setShowAliasModal(false)}>
+          <div className="snooze-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '520px' }}>
+            <div className="snooze-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '1.25rem' }}>🔄</span>
+                <h3 style={{ margin: 0, color: '#fff' }}>Persona & Alias Switcher</h3>
+              </div>
+              <button className="link" onClick={() => setShowAliasModal(false)} style={{ color: '#aaa' }}>
+                ✕
+              </button>
+            </div>
+            <p style={{ fontSize: '0.85rem', color: '#b9a8cf', margin: '8px 0 16px 0' }}>
+              Switch your active sending persona across Chase Studios sub-identities without logging out:
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {/* Default Primary */}
+              <div
+                className={`persona-option ${!activeSenderAlias ? 'selected' : ''}`}
+                onClick={() => {
+                  setActiveSenderAlias('');
+                  localStorage.removeItem('chase-mail-active-alias');
+                  setNotice('Switched to primary identity.');
+                  setShowAliasModal(false);
+                }}
+              >
+                <div>
+                  <strong>✦ Primary Studio Handle ({getTier(account.edition).displayName})</strong>
+                  <small style={{ display: 'block', color: '#8fe2ff' }}>{plannedAddress(account.handle, account.edition)}</small>
+                </div>
+                {!activeSenderAlias && <span className="persona-active-indicator">ACTIVE</span>}
+              </div>
+
+              {/* Executive Alias */}
+              <div
+                className={`persona-option ${activeSenderAlias === `${account.handle}.exec@chase-studios.org` ? 'selected' : ''}`}
+                onClick={() => {
+                  const val = `${account.handle}.exec@chase-studios.org`;
+                  setActiveSenderAlias(val);
+                  localStorage.setItem('chase-mail-active-alias', val);
+                  setNotice(`Switched to Executive Office: ${val}`);
+                  setShowAliasModal(false);
+                }}
+              >
+                <div>
+                  <strong>👑 Executive & Management Office</strong>
+                  <small style={{ display: 'block', color: '#8fe2ff' }}>{account.handle}.exec@chase-studios.org</small>
+                </div>
+                {activeSenderAlias === `${account.handle}.exec@chase-studios.org` && <span className="persona-active-indicator">ACTIVE</span>}
+              </div>
+
+              {/* Streaming & Creator */}
+              <div
+                className={`persona-option ${activeSenderAlias === `${account.handle}.stream@chase-studios.org` ? 'selected' : ''}`}
+                onClick={() => {
+                  const val = `${account.handle}.stream@chase-studios.org`;
+                  setActiveSenderAlias(val);
+                  localStorage.setItem('chase-mail-active-alias', val);
+                  setNotice(`Switched to Creator & Streaming: ${val}`);
+                  setShowAliasModal(false);
+                }}
+              >
+                <div>
+                  <strong>🎮 Creator & Streaming Broadcast</strong>
+                  <small style={{ display: 'block', color: '#8fe2ff' }}>{account.handle}.stream@chase-studios.org</small>
+                </div>
+                {activeSenderAlias === `${account.handle}.stream@chase-studios.org` && <span className="persona-active-indicator">ACTIVE</span>}
+              </div>
+
+              {/* Press & Media */}
+              <div
+                className={`persona-option ${activeSenderAlias === `press@chase-studios.org` ? 'selected' : ''}`}
+                onClick={() => {
+                  const val = `press@chase-studios.org`;
+                  setActiveSenderAlias(val);
+                  localStorage.setItem('chase-mail-active-alias', val);
+                  setNotice(`Switched to Press & Media: ${val}`);
+                  setShowAliasModal(false);
+                }}
+              >
+                <div>
+                  <strong>📰 Press & Public Relations</strong>
+                  <small style={{ display: 'block', color: '#8fe2ff' }}>press@chase-studios.org</small>
+                </div>
+                {activeSenderAlias === `press@chase-studios.org` && <span className="persona-active-indicator">ACTIVE</span>}
+              </div>
+
+              {/* Custom Alias Input */}
+              <form
+                onSubmit={e => {
+                  e.preventDefault();
+                  if (customAliasInput.trim() && customAliasInput.includes('@')) {
+                    const clean = customAliasInput.trim().toLowerCase();
+                    setActiveSenderAlias(clean);
+                    localStorage.setItem('chase-mail-active-alias', clean);
+                    setNotice(`Switched to custom alias: ${clean}`);
+                    setCustomAliasInput('');
+                    setShowAliasModal(false);
+                  }
+                }}
+                style={{ marginTop: '12px', display: 'flex', gap: '8px' }}
+              >
+                <input
+                  type="email"
+                  placeholder="custom.alias@chase-studios.org"
+                  value={customAliasInput}
+                  onChange={e => setCustomAliasInput(e.target.value)}
+                  style={{ flex: 1, padding: '8px 12px', borderRadius: '6px' }}
+                />
+                <button type="submit" className="primary-btn" style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}>
+                  Set Persona
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 5-Second Undo Send Action Banner */}

@@ -2603,3 +2603,359 @@ body.gold-trim button:not(.side):not(.link):not(.danger-btn) {
 
 
 
+
+/* ==========================================================================
+   Studio Release Calendar & Milestone Timeline
+   ========================================================================== */
+.calendar-view-container {
+  padding: 24px 32px;
+  max-width: 1000px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.calendar-toolbar {
+  margin-bottom: 24px;
+}
+
+.calendar-filter-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #c5b5d8;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-pill:hover {
+  background: rgba(134, 72, 235, 0.2);
+  color: #fff;
+  border-color: rgba(134, 72, 235, 0.4);
+}
+
+.filter-pill.active {
+  background: #8648eb;
+  color: #fff;
+  border-color: #8648eb;
+  box-shadow: 0 0 12px rgba(134, 72, 235, 0.4);
+}
+
+.calendar-empty {
+  text-align: center;
+  padding: 60px 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+.calendar-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.calendar-event-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 14px 18px;
+  transition: all 0.2s ease;
+}
+
+.calendar-event-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(134, 72, 235, 0.4);
+  transform: translateY(-1px);
+}
+
+.calendar-event-card.status-today {
+  border-left: 4px solid #eab308;
+}
+
+.calendar-event-card.status-future {
+  border-left: 4px solid #8648eb;
+}
+
+.calendar-event-card.status-urgent {
+  border-left: 4px solid #ef4444;
+}
+
+.calendar-event-card.status-past {
+  border-left: 4px solid #6b7280;
+  opacity: 0.65;
+}
+
+.calendar-event-left {
+  flex-shrink: 0;
+}
+
+.event-date-block {
+  width: 54px;
+  height: 54px;
+  background: rgba(134, 72, 235, 0.12);
+  border: 1px solid rgba(134, 72, 235, 0.3);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.event-month {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #c084fc;
+}
+
+.event-day {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.1;
+}
+
+.calendar-event-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.calendar-event-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.calendar-event-title-row strong {
+  font-size: 0.98rem;
+  color: #fff;
+}
+
+.calendar-event-desc {
+  font-size: 0.85rem;
+  color: #a79bb9;
+  margin: 6px 0 4px 0;
+  line-height: 1.4;
+}
+
+.calendar-event-time {
+  font-size: 0.78rem;
+  color: #8fe2ff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.calendar-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.badge-youtube {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-stream {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.badge-sponsor {
+  background: rgba(234, 179, 8, 0.15);
+  color: #fde047;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.badge-sync {
+  background: rgba(34, 211, 238, 0.15);
+  color: #67e8f9;
+  border: 1px solid rgba(34, 211, 238, 0.3);
+}
+
+.badge-general {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+}
+
+.time-pill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.time-pill.status-future {
+  background: rgba(134, 72, 235, 0.2);
+  color: #d8b4fe;
+}
+
+.time-pill.status-today {
+  background: rgba(234, 179, 8, 0.2);
+  color: #fef08a;
+}
+
+.time-pill.status-urgent {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.time-pill.status-past {
+  background: rgba(107, 114, 128, 0.2);
+  color: #9ca3af;
+}
+
+.calendar-event-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ==========================================================================
+   Real-Time Delivery Lifecycle Tracker & Detected Event Banner
+   ========================================================================== */
+.delivery-status-tracker {
+  display: flex;
+  gap: 16px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.delivery-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.5;
+}
+
+.delivery-step.completed {
+  opacity: 1;
+}
+
+.delivery-step.completed.read {
+  color: #67e8f9;
+}
+
+.step-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.delivery-step.completed .step-icon {
+  background: rgba(134, 72, 235, 0.3);
+  color: #c084fc;
+}
+
+.delivery-step.completed.read .step-icon {
+  background: rgba(34, 211, 238, 0.3);
+  color: #22d3ee;
+}
+
+.step-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.step-text strong {
+  font-size: 0.78rem;
+  color: #e2e8f0;
+}
+
+.step-text small {
+  font-size: 0.68rem;
+  color: #94a3b8;
+}
+
+.detected-event-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, rgba(134, 72, 235, 0.15), rgba(34, 211, 238, 0.15));
+  border: 1px solid rgba(134, 72, 235, 0.35);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 12px;
+  gap: 12px;
+}
+
+/* ==========================================================================
+   Persona & Multi-Account Switcher
+   ========================================================================== */
+.persona-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.persona-option:hover {
+  background: rgba(134, 72, 235, 0.12);
+  border-color: rgba(134, 72, 235, 0.4);
+}
+
+.persona-option.selected {
+  background: rgba(134, 72, 235, 0.18);
+  border-color: #8648eb;
+}
+
+.persona-active-indicator {
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: #8648eb;
+  color: #fff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+}
+
+.template-preset-select {
+  background: rgba(134, 72, 235, 0.15);
+  border: 1px solid rgba(134, 72, 235, 0.3);
+  color: #e9d5ff;
+}

@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Account, Contact, MailAttachment } from '../lib/types';
 import { getTier, plannedAddress } from '../lib/tiers';
 import { polishDraftText } from '../lib/aiAssistant';
+import { getTemplates, saveCustomTemplate } from '../lib/templates';
 
 interface ComposeModalProps {
   db: SupabaseClient | null;
@@ -14,6 +15,7 @@ interface ComposeModalProps {
   initialSubject?: string;
   initialBody?: string;
   initialAttachments?: MailAttachment[];
+  activeSenderAlias?: string;
   onClose: () => void;
   onSent: (msg: string, sentDetails?: { id: string; to: string; subject: string; body: string }) => void;
   onDraftSaved: () => void;
@@ -30,6 +32,7 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
   initialSubject = '',
   initialBody = '',
   initialAttachments = [],
+  activeSenderAlias,
   onClose,
   onSent,
   onDraftSaved,
@@ -58,6 +61,17 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
   // Schedule Send State
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduledDateTime, setScheduledDateTime] = useState('');
+
+  // Studio Templates
+  const templates = useMemo(() => getTemplates(), []);
+
+  const handleApplyTemplate = (id: string) => {
+    const t = templates.find(x => x.id === id);
+    if (t) {
+      if (!subject.trim()) setSubject(t.subject);
+      setBody(t.body);
+    }
+  };
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -264,7 +278,7 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
       try {
         const { data, error } = await db.functions.invoke('send-email', {
           body: {
-            from: plannedAddress(account.handle, account.edition),
+            from: activeSenderAlias || plannedAddress(account.handle, account.edition),
             to: recipientInput,
             subject: subject.trim() || '(No subject)',
             body: body,
@@ -404,6 +418,14 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
         {errorMsg && <div className="compose-error">{errorMsg}</div>}
 
         <div className="compose-body-form">
+          <div className="compose-row">
+            <label>From</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#c084fc', padding: '6px 0' }}>
+              <strong>{account.display_name || account.handle}</strong>
+              <span style={{ color: '#8fe2ff' }}>&lt;{activeSenderAlias || plannedAddress(account.handle, account.edition)}&gt;</span>
+            </div>
+          </div>
+
           <div className="compose-row">
             <label>To</label>
             <input
@@ -573,6 +595,23 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
             </button>
 
             <select
+              className="sig-preset-select template-preset-select"
+              title="Insert Studio Template"
+              onChange={e => {
+                if (e.target.value) {
+                  handleApplyTemplate(e.target.value);
+                  e.target.value = '';
+                }
+              }}
+              defaultValue=""
+            >
+              <option value="" disabled>📜 Templates...</option>
+              {templates.map(t => (
+                <option key={t.id} value={t.id}>{t.title}</option>
+              ))}
+            </select>
+
+            <select
               className="sig-preset-select ai-polish-select"
               title="Enhance & polish draft with Chase Intelligence AI"
               onChange={e => {
@@ -709,6 +748,25 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
               onClick={handleManualSaveDraft}
             >
               Save Draft
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (subject.trim() || body.trim()) {
+                  saveCustomTemplate({
+                    id: 'custom-' + Date.now(),
+                    title: '📌 ' + (subject.slice(0, 24) || 'Custom Template'),
+                    subject,
+                    body,
+                    category: 'custom'
+                  });
+                  onSent('Draft saved as a reusable studio template!');
+                }
+              }}
+              title="Save this draft as a reusable custom template"
+            >
+              💾 Save Template
             </button>
           </div>
           <div className="footer-right">

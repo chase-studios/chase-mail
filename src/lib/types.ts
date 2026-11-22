@@ -76,6 +76,32 @@ export type ScheduledMessage = {
   createdAt: string;
 };
 
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  date: string;
+  category: 'youtube' | 'stream' | 'sponsor' | 'sync' | 'general';
+  description?: string;
+  mailId?: string;
+};
+
+export type EmailTemplate = {
+  id: string;
+  title: string;
+  subject: string;
+  body: string;
+  category: 'sponsorship' | 'collab' | 'fanmail' | 'legal' | 'custom';
+  isCustom?: boolean;
+};
+
+export type AutoResponderConfig = {
+  enabled: boolean;
+  subject: string;
+  body: string;
+  startDate?: string;
+  endDate?: string;
+};
+
 export type SoundProfile = 'executive' | 'cyber' | 'minimal' | 'mute';
 export type AppTheme = 'dark' | 'royal-gold' | 'cyber-vanguard' | 'oled' | 'horizon';
 
