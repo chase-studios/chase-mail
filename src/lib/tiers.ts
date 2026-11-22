@@ -1,15 +1,17 @@
 import { AccountTier, TierDefinition } from './types';
 
+export const PRIMARY_DOMAIN = 'chase-studios.org';
+
 export const TIERS: Record<AccountTier, TierDefinition> = {
   community: {
     id: 'community',
     displayName: 'Community Edition',
-    domain: 'chasemail.com',
+    domain: PRIMARY_DOMAIN,
     description: 'Standard public email access for the Chase Studios universe.',
     maxAttachmentSizeMB: 10,
     mailboxStorageGB: 5,
     features: [
-      'Native @chasemail.com address',
+      `Native @${PRIMARY_DOMAIN} address`,
       'Standard Inbound/Outbound mail',
       'Pocket Companion nursery',
       'Basic themes & personalization'
@@ -20,12 +22,12 @@ export const TIERS: Record<AccountTier, TierDefinition> = {
   prime: {
     id: 'prime',
     displayName: 'Prime Edition',
-    domain: 'chaseprime.com',
+    domain: PRIMARY_DOMAIN,
     description: 'Enhanced edition with dual address alias and extended mailbox capacity.',
     maxAttachmentSizeMB: 25,
     mailboxStorageGB: 25,
     features: [
-      'Native @chaseprime.com & @chasemail.com alias',
+      `Native @${PRIMARY_DOMAIN} & alias support`,
       'Priority mail processing',
       'Custom signatures & rich formatting',
       'Extended companion care & evolution',
@@ -37,7 +39,7 @@ export const TIERS: Record<AccountTier, TierDefinition> = {
   royal: {
     id: 'royal',
     displayName: 'Royal Edition',
-    domain: 'chasemail.com', // Confirmed primary domain for Royal accounts with VIP routing
+    domain: PRIMARY_DOMAIN,
     description: 'Exclusive luxury tier with black, purple and gold trim aesthetic.',
     maxAttachmentSizeMB: 50,
     mailboxStorageGB: 100,
@@ -54,12 +56,12 @@ export const TIERS: Record<AccountTier, TierDefinition> = {
   vanguard: {
     id: 'vanguard',
     displayName: 'Vanguard Edition',
-    domain: 'chasevanguard.com',
+    domain: PRIMARY_DOMAIN,
     description: 'Advanced tactical edition featuring black-and-green aesthetic and enhanced security.',
     maxAttachmentSizeMB: 50,
     mailboxStorageGB: 100,
     features: [
-      'Native @chasevanguard.com address',
+      `Native @${PRIMARY_DOMAIN} address`,
       'Black-and-green visual styling & badge',
       'End-to-end security & 2FA enforcement',
       'Delivery queues & telemetry access',
@@ -71,7 +73,7 @@ export const TIERS: Record<AccountTier, TierDefinition> = {
   studio: {
     id: 'studio',
     displayName: 'Studio Edition',
-    domain: 'chase-studios.org',
+    domain: PRIMARY_DOMAIN,
     description: 'Reserved executive and founder tier for verified Chase Studios personnel.',
     maxAttachmentSizeMB: 100,
     mailboxStorageGB: 500,
@@ -93,6 +95,5 @@ export function getTier(edition: string | undefined): TierDefinition {
 }
 
 export function plannedAddress(handle: string, edition?: string): string {
-  const tier = getTier(edition);
-  return `${handle}@${tier.domain}`;
+  return `${handle}@${PRIMARY_DOMAIN}`;
 }

@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
       await adminClient.from('mail_delivery_events').insert({
         event_type: 'bounced',
         details: {
-          reason: `No Chase Mail account found for handle: ${handleMatch}`,
+          reason: `No Chase Mail account found for handle: ${localPart}`,
           to: toAddress,
           from: fromAddress,
           subject
@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
 
       return new Response(JSON.stringify({
         status: 'unrouted',
-        message: `Recipient handle "${handleMatch}" is not registered on Chase Mail.`
+        message: `Recipient handle "${localPart}" is not registered on Chase Mail.`
       }), {
         status: 404,
         headers: { 'Content-Type': 'application/json' }

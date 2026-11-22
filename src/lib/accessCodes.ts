@@ -78,6 +78,29 @@ export function validateRegistrationCode(
     return { valid: true, role: targetDef.role, matchedTier: desiredTier };
   }
 
+  // 1b. Friendly tier keyword aliases
+  const ALIASES: Record<string, { tier: AccountTier; role: AccountRole }> = {
+    'COMMUNITY': { tier: 'community', role: 'user' },
+    'COMMUNITY-2026': { tier: 'community', role: 'user' },
+    'COMMUNITY-CHASE-2026': { tier: 'community', role: 'user' },
+    'PRIME': { tier: 'prime', role: 'user' },
+    'PRIME-2026': { tier: 'prime', role: 'user' },
+    'PRIME-CHASE-2026': { tier: 'prime', role: 'user' },
+    'ROYAL': { tier: 'royal', role: 'user' },
+    'ROYAL-2026': { tier: 'royal', role: 'user' },
+    'ROYAL-CHASE-2026': { tier: 'royal', role: 'user' },
+    'VANGUARD': { tier: 'vanguard', role: 'user' },
+    'VANGUARD-2026': { tier: 'vanguard', role: 'user' },
+    'VANGUARD-CHASE-2026': { tier: 'vanguard', role: 'user' },
+    'STUDIO': { tier: 'studio', role: 'executive' },
+    'STUDIO-2026': { tier: 'studio', role: 'executive' },
+    'STUDIO-EXEC-2026': { tier: 'studio', role: 'executive' }
+  };
+
+  if (ALIASES[clean]) {
+    return { valid: true, role: ALIASES[clean].role, matchedTier: ALIASES[clean].tier };
+  }
+
   // 2. Super Admin universal authorization key
   if (clean === 'CHASE-STUDIOS-SUPERADMIN-2026' || clean === 'CHASE-STUDIOS-ADMIN-2026') {
     return { valid: true, role: 'super_admin', matchedTier: desiredTier };
