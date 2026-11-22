@@ -340,15 +340,22 @@ function App() {
     if (!db) return;
     setBusy(true);
     setNotice('');
+
+    let loginEmail = email.trim();
+    // Allow logging in with plain username, defaulting to @chasemail.com
+    if (!loginEmail.includes('@')) {
+      loginEmail = `${loginEmail.toLowerCase()}@chasemail.com`;
+    }
+
     const r =
       mode === 'login'
-        ? await db.auth.signInWithPassword({ email, password })
-        : await db.auth.signUp({ email, password });
+        ? await db.auth.signInWithPassword({ email: loginEmail, password })
+        : await db.auth.signUp({ email: loginEmail, password });
     setBusy(false);
     setNotice(
       r.error?.message ||
         (mode === 'signup'
-          ? 'Check your existing email for a confirmation link, if required.'
+          ? 'Account created! Please set up your inbox address below.'
           : 'Signed in.')
     );
   }
@@ -356,7 +363,11 @@ function App() {
   async function resetPassword() {
     if (!db || !email.trim()) return;
     setBusy(true);
-    const { error } = await db.auth.resetPasswordForEmail(email.trim(), {
+    let resetEmail = email.trim();
+    if (!resetEmail.includes('@')) {
+      resetEmail = `${resetEmail.toLowerCase()}@chasemail.com`;
+    }
+    const { error } = await db.auth.resetPasswordForEmail(resetEmail, {
       redirectTo: window.location.origin
     });
     setBusy(false);
@@ -686,18 +697,41 @@ function App() {
           </span>
         </div>
         <span className="tag">EVERY GENRE. NO LIMITS.</span>
-        <label className="theme-picker">
-          Theme{' '}
-          <select
-            aria-label="Color theme"
-            value={theme}
-            onChange={e => setTheme(e.target.value as typeof theme)}
-          >
-            <option value="purple">Purple</option>
-            <option value="midnight">Midnight</option>
-            <option value="light">Light</option>
-          </select>
-        </label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <label className="theme-picker">
+            Theme{' '}
+            <select
+              aria-label="Color theme"
+              value={theme}
+              onChange={e => setTheme(e.target.value as typeof theme)}
+            >
+              <option value="purple">Purple</option>
+              <option value="midnight">Midnight</option>
+              <option value="light">Light</option>
+            </select>
+          </label>
+          {session && (
+            <button
+              type="button"
+              className="mini-btn"
+              style={{
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+                color: '#fca5a5',
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '0.8rem',
+                cursor: 'pointer'
+              }}
+              onClick={() => {
+                if (db) void db.auth.signOut();
+              }}
+              title="Sign out of current account"
+            >
+              Sign Out
+            </button>
+          )}
+        </div>
       </header>
 
       {!db ? (
@@ -721,11 +755,83 @@ function App() {
           </div>
 
           <main className="panel auth">
-            <h1>{resetMode ? 'Reset your password' : 'Welcome to Chase Mail'}</h1>
+            {/* Prominent Auth Mode Switcher */}
+            <div
+              style={{
+                display: 'flex',
+                gap: '8px',
+                marginBottom: '18px',
+                background: 'rgba(255, 255, 255, 0.04)',
+                padding: '4px',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.08)'
+              }}
+            >
+              <button
+                type="button"
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background:
+                    mode === 'login' && !resetMode
+                      ? 'linear-gradient(135deg, var(--accent), #7928ca)'
+                      : 'transparent',
+                  color: mode === 'login' && !resetMode ? '#fff' : 'rgba(255, 255, 255, 0.7)',
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onClick={() => {
+                  setMode('login');
+                  setResetMode(false);
+                  setNotice('');
+                }}
+              >
+                🔐 Sign In
+              </button>
+              <button
+                type="button"
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background:
+                    mode === 'signup' && !resetMode
+                      ? 'linear-gradient(135deg, var(--accent), #7928ca)'
+                      : 'transparent',
+                  color: mode === 'signup' && !resetMode ? '#fff' : 'rgba(255, 255, 255, 0.7)',
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onClick={() => {
+                  setMode('signup');
+                  setResetMode(false);
+                  setNotice('');
+                }}
+              >
+                ✨ Create Account
+              </button>
+            </div>
+
+            <h1>
+              {resetMode
+                ? 'Reset your password'
+                : mode === 'login'
+                ? 'Sign In to Chase Mail'
+                : 'Create your account'}
+            </h1>
             <p>
               {resetMode
-                ? 'Enter your email to receive a recovery link.'
-                : 'Sign in or create your account to get started.'}
+                ? 'Enter your email or Chase Mail address to receive a recovery link.'
+                : mode === 'login'
+                ? 'Log in with your Chase Mail address, username, or existing email.'
+                : 'Sign up to claim your address and join the Chase Studios universe.'}
             </p>
             <form
               onSubmit={e => {
@@ -734,13 +840,17 @@ function App() {
               }}
             >
               <label>
-                Existing email address
+                {mode === 'login' ? 'Email or Username' : 'Email Address'}
                 <input
-                  type="email"
+                  type={mode === 'login' ? 'text' : 'email'}
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  placeholder="you@example.com"
+                  placeholder={
+                    mode === 'login'
+                      ? 'name@chasemail.com or username'
+                      : 'you@chasemail.com or personal email'
+                  }
                 />
               </label>
               {!resetMode && (
@@ -751,40 +861,51 @@ function App() {
                     required
                     value={password}
                     onChange={e => setPassword(e.target.value)}
+                    placeholder="Enter your password"
                   />
                 </label>
               )}
-              <button disabled={busy}>
-                {resetMode
+              <button disabled={busy} style={{ marginTop: '6px' }}>
+                {busy
+                  ? 'Please wait...'
+                  : resetMode
                   ? 'Send reset link'
                   : mode === 'login'
-                  ? 'Sign in'
-                  : 'Create account'}
+                  ? 'Sign In'
+                  : 'Create Account'}
               </button>
-              <button
-                type="button"
-                className="link"
-                onClick={() => {
-                  setResetMode(!resetMode);
-                  setNotice('');
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: '12px',
+                  fontSize: '0.85rem'
                 }}
               >
-                {resetMode ? 'Back to sign in' : 'Forgot password?'}
-              </button>
-              {!resetMode && (
                 <button
                   type="button"
                   className="link"
                   onClick={() => {
-                    setMode(mode === 'login' ? 'signup' : 'login');
+                    setResetMode(!resetMode);
                     setNotice('');
                   }}
                 >
-                  {mode === 'login'
-                    ? 'Need an account? Sign up'
-                    : 'Already have an account? Sign in'}
+                  {resetMode ? '← Back to sign in' : 'Forgot password?'}
                 </button>
-              )}
+                {!resetMode && (
+                  <button
+                    type="button"
+                    className="link"
+                    onClick={() => {
+                      setMode(mode === 'login' ? 'signup' : 'login');
+                      setNotice('');
+                    }}
+                  >
+                    {mode === 'login' ? 'Need an account? Sign up' : 'Already have an account? Sign in'}
+                  </button>
+                )}
+              </div>
             </form>
           </main>
         </div>
