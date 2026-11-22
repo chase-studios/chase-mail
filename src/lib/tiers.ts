@@ -71,7 +71,7 @@ export const TIERS: Record<AccountTier, TierDefinition> = {
   studio: {
     id: 'studio',
     displayName: 'Studio Edition',
-    domain: 'chasestudios.org',
+    domain: 'chase-studios.org',
     description: 'Reserved executive and founder tier for verified Chase Studios personnel.',
     maxAttachmentSizeMB: 100,
     mailboxStorageGB: 500,
