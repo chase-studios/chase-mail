@@ -73,14 +73,18 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
   const senderAcc = accounts.find(a => a.user_id === latestMail.sender_id);
   const recipientAcc = accounts.find(a => a.user_id === latestMail.recipient_id);
 
-  const senderDisplayName = senderAcc
+  const senderDisplayName = latestMail.is_external
+    ? (latestMail.external_from || 'External Sender')
+    : senderAcc
     ? `${senderAcc.display_name || senderAcc.handle} <${plannedAddress(
         senderAcc.handle,
         senderAcc.edition
       )}>`
     : 'Chase Mail user';
 
-  const recipientDisplayName = recipientAcc
+  const recipientDisplayName = latestMail.is_external
+    ? (latestMail.external_to || 'You')
+    : recipientAcc
     ? `${recipientAcc.display_name || recipientAcc.handle} <${plannedAddress(
         recipientAcc.handle,
         recipientAcc.edition
@@ -228,11 +232,15 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
           const isExpanded = expandedIds.has(m.id);
           const isMsgSender = m.sender_id === currentUserId;
           const msgSenderAcc = accounts.find(a => a.user_id === m.sender_id);
-          const msgSenderName = isMsgSender
+          const msgSenderName = m.is_external
+            ? m.external_from || 'External Sender'
+            : isMsgSender
             ? 'You'
             : msgSenderAcc?.display_name || msgSenderAcc?.handle || 'Chase Mail user';
-          const msgSenderHandle = msgSenderAcc ? `@${msgSenderAcc.handle}` : '';
-          const msgSenderEmail = msgSenderAcc
+          const msgSenderHandle = m.is_external ? '🌐 Inbound' : msgSenderAcc ? `@${msgSenderAcc.handle}` : '';
+          const msgSenderEmail = m.is_external
+            ? m.external_from || ''
+            : msgSenderAcc
             ? plannedAddress(msgSenderAcc.handle, msgSenderAcc.edition)
             : 'user@chasemail.com';
 
@@ -241,15 +249,18 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
               key={m.id}
               className={`thread-card ${isExpanded ? 'expanded' : 'collapsed'} ${
                 isMsgSender ? 'outgoing' : 'incoming'
-              }`}
+              } ${m.is_external ? 'external-card' : ''}`}
             >
               <div className="thread-card-header" onClick={() => toggleExpand(m.id)}>
                 <div className="thread-card-sender-info">
-                  <div className="thread-sender-avatar">
-                    {msgSenderName.slice(0, 1).toUpperCase()}
+                  <div className={`thread-sender-avatar ${m.is_external ? 'external-avatar' : ''}`}>
+                    {m.is_external ? '🌐' : msgSenderName.slice(0, 1).toUpperCase()}
                   </div>
                   <div className="thread-sender-text">
-                    <strong>{msgSenderName}</strong>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <strong>{msgSenderName}</strong>
+                      {m.is_external && <span className="external-badge">🌐 External</span>}
+                    </div>
                     <span className="thread-sender-handle">{msgSenderHandle} &lt;{msgSenderEmail}&gt;</span>
                   </div>
                 </div>

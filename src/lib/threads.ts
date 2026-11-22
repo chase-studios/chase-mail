@@ -38,6 +38,9 @@ export function groupMessagesIntoThreads(
 
   const getThreadKey = (m: Mail) => {
     const normSubj = normalizeSubject(m.subject || '');
+    if (m.is_external) {
+      return `ext::${m.external_from || m.sender_id}::${normSubj}`;
+    }
     const otherId = m.sender_id === currentUserId ? m.recipient_id : m.sender_id;
     return `${otherId}::${normSubj}`;
   };

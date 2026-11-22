@@ -48,6 +48,9 @@ export type Mail = {
   starred?: boolean;
   folder?: 'inbox' | 'sent' | 'archive' | 'trash' | 'spam';
   is_html?: boolean;
+  is_external?: boolean;
+  external_from?: string;
+  external_to?: string;
 };
 
 export type Draft = {
@@ -79,8 +82,12 @@ export type ExternalMail = {
   to_address: string;
   subject: string;
   body_text: string;
+  body_html?: string;
   received_at: string;
   read_at: string | null;
+  is_read?: boolean;
+  from_email?: string;
+  to_email?: string;
   attachments?: MailAttachment[];
 };
 

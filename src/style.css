@@ -1532,4 +1532,272 @@ body.gold-trim button:not(.side):not(.link):not(.danger-btn) {
   box-shadow: 0 0 0 2px rgba(134, 72, 235, 0.3);
 }
 
+/* ==========================================================================
+   Executive Feature Suite: Unified Inbox, Bulk Actions, Undo Send, Rich Composer
+   ========================================================================== */
+
+/* Unified Inbox Source Filter Pills */
+.inbox-filter-pills {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 14px 0;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.filter-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbbad9;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+.filter-pill:hover {
+  background: rgba(134, 72, 235, 0.2);
+  border-color: #8648eb;
+  color: #fff;
+}
+.filter-pill.active {
+  background: linear-gradient(135deg, #8648eb, #501fa0);
+  border-color: #a855f7;
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(134, 72, 235, 0.35);
+}
+
+/* Search and Select Bar */
+.search-and-select-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  background: #171024;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 6px 14px;
+}
+.select-all-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: #bfa7d9;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.search-and-select-bar input[type="search"] {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-size: 0.9rem;
+  padding: 6px 0;
+}
+.search-and-select-bar input[type="search"]::placeholder {
+  color: #8a78a5;
+}
+
+/* Thread Row & External Card Enhancements */
+.thread-checkbox {
+  accent-color: #8648eb;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+.message.selected {
+  background: rgba(134, 72, 235, 0.18) !important;
+  border-left: 3px solid #8648eb !important;
+}
+.message.external-card {
+  border-left: 3px solid #22d3ee;
+}
+.external-badge {
+  display: inline-block;
+  background: rgba(34, 211, 238, 0.15);
+  color: #22d3ee;
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 8px;
+  letter-spacing: 0.03em;
+}
+
+/* Floating Bulk Actions Toolbar */
+.bulk-actions-toolbar {
+  position: sticky;
+  top: 10px;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: linear-gradient(135deg, #1f1432, #140c22);
+  border: 1px solid #8648eb;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 16px rgba(134, 72, 235, 0.25);
+  border-radius: 14px;
+  padding: 8px 16px;
+  margin-bottom: 14px;
+  animation: slideDown 0.2s ease;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.bulk-count {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #e3d2ff;
+  white-space: nowrap;
+}
+.bulk-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bulk-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.bulk-btn:hover {
+  background: #8648eb;
+  border-color: #a855f7;
+}
+.bulk-btn-delete:hover {
+  background: #e11d48 !important;
+  border-color: #f43f5e !important;
+}
+.bulk-btn-close {
+  background: transparent;
+  border: none;
+  color: #a895be;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.bulk-btn-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Floating 5-Second Undo Send Banner */
+.undo-send-banner {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, #181026, #0e0817);
+  border: 1px solid #22d3ee;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7), 0 0 20px rgba(34, 211, 238, 0.3);
+  color: #fff;
+  border-radius: 14px;
+  padding: 12px 20px;
+  font-size: 0.9rem;
+  animation: slideUpToast 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 90vw;
+}
+.undo-send-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.undo-send-btn {
+  background: linear-gradient(135deg, #22d3ee, #0891b2);
+  color: #000;
+  font-weight: 700;
+  font-size: 0.82rem;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.undo-send-btn:hover {
+  transform: scale(1.04);
+}
+.undo-send-dismiss {
+  background: transparent;
+  border: none;
+  color: #8da4be;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.undo-send-dismiss:hover {
+  color: #fff;
+}
+
+/* Composer Tabs, Rich Formatting & Signature Presets */
+.composer-tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+}
+.composer-tab-btn {
+  background: transparent;
+  border: none;
+  color: #9f8fb4;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.composer-tab-btn.active {
+  background: rgba(134, 72, 235, 0.2);
+  color: #fff;
+  border: 1px solid rgba(134, 72, 235, 0.4);
+}
+.sig-preset-select {
+  background: #191028;
+  border: 1px solid #4d3366;
+  color: #d1c4e9;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.78rem;
+  outline: none;
+  cursor: pointer;
+}
+.sig-preset-select:hover {
+  border-color: #8648eb;
+}
+.compose-preview-pane {
+  min-height: 220px;
+  max-height: 380px;
+  overflow-y: auto;
+  background: #0d0815;
+  border: 1px solid #3b2752;
+  border-radius: 10px;
+  padding: 14px;
+  color: #e2d9f3;
+  line-height: 1.6;
+}
+.preview-placeholder {
+  color: #7b6a94;
+  font-style: italic;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+
 

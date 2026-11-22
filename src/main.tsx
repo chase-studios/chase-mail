@@ -179,6 +179,22 @@ function App() {
     mail: Mail;
   } | null>(null);
 
+  // Unified Inbox Source Filter State ('all' | 'network' | 'external')
+  const [inboxSourceFilter, setInboxSourceFilter] = useState<'all' | 'network' | 'external'>('all');
+
+  // Batch Multi-Select State
+  const [selectedMessageIds, setSelectedMessageIds] = useState<Set<string>>(new Set());
+
+  // Undo Send Engine State
+  const [undoSend, setUndoSend] = useState<{
+    id: string;
+    to: string;
+    subject: string;
+    body: string;
+    secondsLeft: number;
+  } | null>(null);
+  const undoTimerRef = useRef<any>(null);
+
   // Notification Permission Request Banner State
   const [showPermissionBanner, setShowPermissionBanner] = useState(() => {
     return (
@@ -565,38 +581,23 @@ function App() {
         m => m.recipient_id === session.user.id && !m.recipient_read_at
       );
       if (unreadInThread.length > 0) {
-        const unreadIds = unreadInThread.map(m => m.id);
-        const { error } = await db
-          .from('mail_messages')
-          .update({ recipient_read_at: new Date().toISOString() })
-          .in('id', unreadIds);
-        if (!error) {
-          await refresh(session.user.id);
+        const internalIds = unreadInThread.filter(m => !m.is_external).map(m => m.id);
+        const externalIds = unreadInThread
+          .filter(m => m.is_external)
+          .map(m => m.id.replace('ext-', ''));
+
+        if (internalIds.length > 0) {
+          await db
+            .from('mail_messages')
+            .update({ recipient_read_at: new Date().toISOString() })
+            .in('id', internalIds);
         }
-      }
-    }
-  }
-
-  async function openMail(m: Mail) {
-    // If mail belongs to a thread, find its thread messages
-    const normSubj = normalizeSubject(m.subject || '');
-    const otherId = m.sender_id === session?.user.id ? m.recipient_id : m.sender_id;
-    const threadMails = mails.filter(x => {
-      const xNorm = normalizeSubject(x.subject || '');
-      const xOther = x.sender_id === session?.user.id ? x.recipient_id : x.sender_id;
-      return xNorm === normSubj && xOther === otherId;
-    });
-    threadMails.sort((a, b) => new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime());
-
-    setOpened(m);
-    setOpenedThreadMails(threadMails.length > 0 ? threadMails : [m]);
-
-    if (db && session?.user.id === m.recipient_id && !m.recipient_read_at) {
-      const { error } = await db
-        .from('mail_messages')
-        .update({ recipient_read_at: new Date().toISOString() })
-        .eq('id', m.id);
-      if (!error) {
+        if (externalIds.length > 0) {
+          await db
+            .from('mail_external_messages')
+            .update({ is_read: true })
+            .in('id', externalIds);
+        }
         await refresh(session.user.id);
       }
     }
@@ -624,6 +625,12 @@ function App() {
       await refresh(session.user.id);
       if (newMsg) {
         setOpenedThreadMails(prev => [...prev, newMsg]);
+        triggerUndoSend({
+          id: newMsg.id,
+          to: who(toUserId),
+          subject: newMsg.subject || subject,
+          body: body
+        });
       }
       return true;
     } catch (err: any) {
@@ -742,6 +749,174 @@ function App() {
     setOpened(null);
   }
 
+  // Convert external messages into unified Mail objects for seamless inbox integration
+  const externalMails = useMemo<Mail[]>(() => {
+    if (!session?.user?.id) return [];
+    return external.map(ext => ({
+      id: `ext-${ext.id}`,
+      sender_id: 'external-sender',
+      recipient_id: session.user.id,
+      subject: ext.subject || '(No subject)',
+      body: ext.body_text || ext.body_html || '',
+      sent_at: ext.received_at,
+      recipient_read_at: ext.read_at || (ext.is_read ? ext.received_at : null),
+      is_external: true,
+      external_from: ext.from_email || ext.from_address || 'external',
+      external_to: ext.to_email || ext.to_address || ''
+    }));
+  }, [external, session?.user?.id]);
+
+  const allMails = useMemo<Mail[]>(() => {
+    return [...mails, ...externalMails];
+  }, [mails, externalMails]);
+
+  // Undo Send Action Engine
+  function triggerUndoSend(details: { id: string; to: string; subject: string; body: string }) {
+    if (undoTimerRef.current) clearInterval(undoTimerRef.current);
+    setUndoSend({ ...details, secondsLeft: 5 });
+
+    let count = 5;
+    undoTimerRef.current = setInterval(() => {
+      count -= 1;
+      if (count <= 0) {
+        clearInterval(undoTimerRef.current);
+        setUndoSend(null);
+      } else {
+        setUndoSend(prev => (prev ? { ...prev, secondsLeft: count } : null));
+      }
+    }, 1000);
+  }
+
+  async function handleExecuteUndo() {
+    if (!undoSend || !db || !session) return;
+    if (undoTimerRef.current) clearInterval(undoTimerRef.current);
+
+    const { id, to, subject, body } = undoSend;
+    setUndoSend(null);
+    setBusy(true);
+
+    try {
+      await db.from('mail_messages').delete().eq('id', id).eq('sender_id', session.user.id);
+      await refresh(session.user.id);
+
+      setComposeInitialTo(to);
+      setComposeInitialSubject(subject);
+      setComposeInitialBody(body);
+      setComposeOpen(true);
+      setNotice('Sending undone. Message reverted to draft editor.');
+    } catch (err: any) {
+      setNotice(`Could not undo send: ${err.message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Batch Multi-Select Handlers
+  function handleToggleSelectThread(threadMails: Mail[], e?: React.MouseEvent) {
+    if (e) e.stopPropagation();
+    setSelectedMessageIds(prev => {
+      const next = new Set(prev);
+      const allSelected = threadMails.length > 0 && threadMails.every(m => next.has(m.id));
+      if (allSelected) {
+        threadMails.forEach(m => next.delete(m.id));
+      } else {
+        threadMails.forEach(m => next.add(m.id));
+      }
+      return next;
+    });
+  }
+
+  function handleToggleSelectAll() {
+    setSelectedMessageIds(prev => {
+      const visibleIds = visible.map(m => m.id);
+      const allSelected = visibleIds.length > 0 && visibleIds.every(id => prev.has(id));
+      if (allSelected) {
+        return new Set();
+      } else {
+        return new Set(visibleIds);
+      }
+    });
+  }
+
+  async function handleBulkMarkRead(markAsRead: boolean) {
+    if (!session || selectedMessageIds.size === 0) return;
+    const targetIds = Array.from(selectedMessageIds);
+    setNotice(`Marking ${targetIds.length} message(s) as ${markAsRead ? 'read' : 'unread'}...`);
+
+    if (db) {
+      const internalIds = targetIds.filter(id => !id.startsWith('ext-'));
+      const externalIds = targetIds.filter(id => id.startsWith('ext-')).map(id => id.replace('ext-', ''));
+
+      if (internalIds.length > 0) {
+        await db
+          .from('mail_messages')
+          .update({ recipient_read_at: markAsRead ? new Date().toISOString() : null })
+          .in('id', internalIds)
+          .eq('recipient_id', session.user.id);
+      }
+      if (externalIds.length > 0) {
+        await db
+          .from('mail_external_messages')
+          .update({ is_read: markAsRead })
+          .in('id', externalIds)
+          .eq('owner_id', session.user.id);
+      }
+      await refresh(session.user.id);
+    }
+    setSelectedMessageIds(new Set());
+    setNotice(`Updated ${targetIds.length} message(s).`);
+  }
+
+  function handleBulkStar() {
+    if (selectedMessageIds.size === 0) return;
+    const targetIds = Array.from(selectedMessageIds);
+    setStarredIds(prev => {
+      const next = new Set(prev);
+      const anyUnstarred = targetIds.some(id => !next.has(id));
+      targetIds.forEach(id => {
+        if (anyUnstarred) next.add(id);
+        else next.delete(id);
+      });
+      return next;
+    });
+    setNotice(`${targetIds.length} message(s) updated.`);
+    setSelectedMessageIds(new Set());
+  }
+
+  function handleBulkArchive() {
+    if (selectedMessageIds.size === 0) return;
+    const targetIds = Array.from(selectedMessageIds);
+    setArchivedIds(prev => {
+      const next = new Set(prev);
+      const anyUnarchived = targetIds.some(id => !next.has(id));
+      targetIds.forEach(id => {
+        if (anyUnarchived) next.add(id);
+        else next.delete(id);
+      });
+      return next;
+    });
+    setNotice(`${targetIds.length} message(s) archived.`);
+    setSelectedMessageIds(new Set());
+  }
+
+  async function handleBulkDelete() {
+    if (selectedMessageIds.size === 0) return;
+    const targetIds = Array.from(selectedMessageIds);
+    if (folder === 'trash') {
+      setDeletedIds(prev => new Set([...prev, ...targetIds]));
+      setTrashIds(prev => {
+        const next = new Set(prev);
+        targetIds.forEach(id => next.delete(id));
+        return next;
+      });
+      setNotice(`Permanently deleted ${targetIds.length} message(s).`);
+    } else {
+      setTrashIds(prev => new Set([...prev, ...targetIds]));
+      setNotice(`Moved ${targetIds.length} message(s) to Trash.`);
+    }
+    setSelectedMessageIds(new Set());
+  }
+
   // Delete / Move to Trash
   async function handleDeleteMail(messageId: string) {
     if (!session) return;
@@ -766,10 +941,17 @@ function App() {
     // Call Supabase soft-delete RPC if available
     if (db) {
       try {
-        await db.rpc('delete_chase_mail_message', {
-          p_message_id: messageId,
-          p_folder: folder === 'sent' ? 'sent' : 'inbox'
-        });
+        if (messageId.startsWith('ext-')) {
+          const rawExtId = messageId.replace('ext-', '');
+          if (folder === 'trash' || trashIds.has(messageId)) {
+            await db.from('mail_external_messages').delete().eq('id', rawExtId);
+          }
+        } else {
+          await db.rpc('delete_chase_mail_message', {
+            p_message_id: messageId,
+            p_folder: folder === 'sent' ? 'sent' : 'inbox'
+          });
+        }
       } catch {}
     }
   }
@@ -781,8 +963,8 @@ function App() {
     setNotice('Trash emptied.');
   }
 
-  // Message Filtering Logic Across Folders
-  const visible = mails.filter(m => {
+  // Message Filtering Logic Across Folders (Unified Inbox)
+  const visible = allMails.filter(m => {
     // Exclude permanently deleted messages
     if (deletedIds.has(m.id)) return false;
 
@@ -790,10 +972,15 @@ function App() {
       if (m.recipient_id !== session?.user.id) return false;
       if (m.recipient_deleted_at) return false;
       if (trashIds.has(m.id) || archivedIds.has(m.id) || spamIds.has(m.id)) return false;
+
+      // In-App Unified Inbox Source Filter
+      if (inboxSourceFilter === 'network' && m.is_external) return false;
+      if (inboxSourceFilter === 'external' && !m.is_external) return false;
     } else if (folder === 'starred') {
       if (!starredIds.has(m.id)) return false;
       if (trashIds.has(m.id)) return false;
     } else if (folder === 'sent') {
+      if (m.is_external) return false;
       if (m.sender_id !== session?.user.id) return false;
       if (m.sender_deleted_at) return false;
       if (trashIds.has(m.id)) return false;
@@ -814,16 +1001,21 @@ function App() {
     );
     const searchString = search.trim().toLowerCase();
 
-    return [m.subject, m.body, targetAccount?.handle || '', targetAccount?.display_name || ''].some(v =>
-      v.toLowerCase().includes(searchString)
-    );
+    return [
+      m.subject,
+      m.body,
+      m.external_from || '',
+      m.external_to || '',
+      targetAccount?.handle || '',
+      targetAccount?.display_name || ''
+    ].some(v => v.toLowerCase().includes(searchString));
   });
 
   // Group visible messages into stacked conversation threads
   const visibleThreads = useMemo(() => {
     if (!session?.user?.id) return [];
-    return groupMessagesIntoThreads(visible, mails, session.user.id, starredIds);
-  }, [visible, mails, session?.user?.id, starredIds]);
+    return groupMessagesIntoThreads(visible, allMails, session.user.id, starredIds);
+  }, [visible, allMails, session?.user?.id, starredIds]);
 
   const who = (id: string) => {
     const a = accounts.find(x => x.user_id === id);
@@ -1650,21 +1842,112 @@ function App() {
 
                 {folder !== 'drafts' && (
                   <>
-                    <label style={{ margin: '14px 0' }}>
-                      Search messages
+                    {folder === 'inbox' && (
+                      <div className="inbox-filter-pills">
+                        <button
+                          type="button"
+                          className={`filter-pill ${inboxSourceFilter === 'all' ? 'active' : ''}`}
+                          onClick={() => setInboxSourceFilter('all')}
+                        >
+                          All Messages
+                        </button>
+                        <button
+                          type="button"
+                          className={`filter-pill ${inboxSourceFilter === 'network' ? 'active' : ''}`}
+                          onClick={() => setInboxSourceFilter('network')}
+                        >
+                          Chase Network
+                        </button>
+                        <button
+                          type="button"
+                          className={`filter-pill ${inboxSourceFilter === 'external' ? 'active' : ''}`}
+                          onClick={() => setInboxSourceFilter('external')}
+                        >
+                          🌐 External Inbound
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="search-and-select-bar">
+                      <label className="select-all-checkbox-label" title="Select all visible messages">
+                        <input
+                          type="checkbox"
+                          checked={visible.length > 0 && visible.every(m => selectedMessageIds.has(m.id))}
+                          onChange={handleToggleSelectAll}
+                        />
+                        <span>Select All</span>
+                      </label>
                       <input
                         type="search"
                         aria-label="Search messages"
-                        placeholder="Search subject, message or username"
+                        placeholder="Search subject, message, or email address"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                       />
-                    </label>
+                    </div>
+
+                    {selectedMessageIds.size > 0 && (
+                      <div className="bulk-actions-toolbar">
+                        <span className="bulk-count">{selectedMessageIds.size} selected</span>
+                        <div className="bulk-btn-group">
+                          <button
+                            type="button"
+                            className="bulk-btn"
+                            onClick={() => void handleBulkMarkRead(true)}
+                            title="Mark as Read"
+                          >
+                            ✓ Read
+                          </button>
+                          <button
+                            type="button"
+                            className="bulk-btn"
+                            onClick={() => void handleBulkMarkRead(false)}
+                            title="Mark as Unread"
+                          >
+                            ✉ Unread
+                          </button>
+                          <button
+                            type="button"
+                            className="bulk-btn"
+                            onClick={handleBulkStar}
+                            title="Star / Unstar"
+                          >
+                            ★ Star
+                          </button>
+                          <button
+                            type="button"
+                            className="bulk-btn"
+                            onClick={handleBulkArchive}
+                            title="Archive"
+                          >
+                            📥 Archive
+                          </button>
+                          <button
+                            type="button"
+                            className="bulk-btn bulk-btn-delete"
+                            onClick={() => void handleBulkDelete()}
+                            title="Delete"
+                          >
+                            🗑 Delete
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          className="bulk-btn-close"
+                          onClick={() => setSelectedMessageIds(new Set())}
+                          title="Clear selection"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
 
                     {visibleThreads.length === 0 ? (
                       <p className="empty">
                         {folder === 'inbox'
-                          ? 'No messages yet. Your Chase Mail journey starts here.'
+                          ? inboxSourceFilter === 'external'
+                            ? 'No external inbound messages yet. Any email sent to your @chase-studios.org address will appear here.'
+                            : 'No messages yet. Your Chase Mail journey starts here.'
                           : folder === 'starred'
                           ? 'No starred messages.'
                           : folder === 'archive'
@@ -1681,19 +1964,43 @@ function App() {
                           const otherParticipantId =
                             thread.participantIds.find(id => id !== session.user.id) ||
                             thread.latestMessage.sender_id;
+                          const isThreadSelected =
+                            thread.messages.length > 0 &&
+                            thread.messages.every(m => selectedMessageIds.has(m.id));
+                          const isExternalMail = Boolean(thread.latestMessage.is_external);
+
                           return (
                             <div
                               key={thread.threadKey}
                               className={
                                 'message ' +
                                 (thread.unread ? 'unread ' : '') +
-                                (thread.count > 1 ? 'stacked-thread' : '')
+                                (thread.count > 1 ? 'stacked-thread ' : '') +
+                                (isThreadSelected ? 'selected ' : '') +
+                                (isExternalMail ? 'external-card ' : '')
                               }
                               style={{ cursor: 'pointer' }}
                               onClick={() => void openThread(thread)}
                             >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span>{who(otherParticipantId)}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                  type="checkbox"
+                                  className="thread-checkbox"
+                                  checked={isThreadSelected}
+                                  onClick={e => handleToggleSelectThread(thread.messages, e)}
+                                  onChange={() => {}}
+                                  aria-label="Select conversation thread"
+                                />
+                                {isExternalMail ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span className="external-badge">🌐 External</span>
+                                    <span style={{ fontWeight: 600, color: '#22d3ee' }}>
+                                      {thread.latestMessage.external_from || 'External Sender'}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span>{who(otherParticipantId)}</span>
+                                )}
                                 {thread.count > 1 && (
                                   <span
                                     className="thread-count-pill"
@@ -1780,12 +2087,42 @@ function App() {
           initialSubject={composeInitialSubject}
           initialBody={composeInitialBody}
           onClose={() => setComposeOpen(false)}
-          onSent={msg => {
+          onSent={(msg, sentDetails) => {
             setNotice(msg);
+            if (sentDetails) {
+              triggerUndoSend(sentDetails);
+            }
             void refresh(session.user.id);
           }}
           onDraftSaved={() => void refresh(session.user.id)}
         />
+      )}
+
+      {/* 5-Second Undo Send Action Banner */}
+      {undoSend && (
+        <div className="undo-send-banner" role="status">
+          <div className="undo-send-info">
+            <span>✉️ Message sent to <strong>{undoSend.to}</strong>.</span>
+          </div>
+          <div className="undo-send-controls">
+            <button
+              type="button"
+              className="undo-send-btn"
+              onClick={() => void handleExecuteUndo()}
+              title="Recall sent message and resume drafting"
+            >
+              ↩ Undo ({undoSend.secondsLeft}s)
+            </button>
+            <button
+              type="button"
+              className="undo-send-dismiss"
+              onClick={() => setUndoSend(null)}
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
       )}
 
       {notice && (

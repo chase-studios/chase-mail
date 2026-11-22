@@ -13,7 +13,7 @@ interface ComposeModalProps {
   initialSubject?: string;
   initialBody?: string;
   onClose: () => void;
-  onSent: (msg: string) => void;
+  onSent: (msg: string, sentDetails?: { id: string; to: string; subject: string; body: string }) => void;
   onDraftSaved: () => void;
 }
 
@@ -38,15 +38,67 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
   const [subject, setSubject] = useState(initialSubject);
   const [body, setBody] = useState(initialBody);
   const [isHtml, setIsHtml] = useState(false);
+  const [activeComposerTab, setActiveComposerTab] = useState<'write' | 'preview'>('write');
   const [attachments, setAttachments] = useState<MailAttachment[]>([]);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [autoSaveStatus, setAutoSaveStatus] = useState<string>('');
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(draftId);
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tier = getTier(account.edition);
   const maxBytes = tier.maxAttachmentSizeMB * 1024 * 1024;
+
+  const insertFormatting = (prefix: string, suffix: string = prefix, placeholder: string = 'text') => {
+    const el = textareaRef.current;
+    if (!el) {
+      setBody(prev => `${prev}${prefix}${placeholder}${suffix}`);
+      return;
+    }
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selectedText = el.value.substring(start, end) || placeholder;
+    const before = el.value.substring(0, start);
+    const after = el.value.substring(end);
+    const newText = `${before}${prefix}${selectedText}${suffix}${after}`;
+    setBody(newText);
+    setTimeout(() => {
+      el.focus();
+      el.setSelectionRange(start + prefix.length, start + prefix.length + selectedText.length);
+    }, 0);
+  };
+
+  const handleApplySignature = (preset: string) => {
+    let sigText = '';
+    const userDisplayName = account.display_name || account.handle;
+    const address = plannedAddress(account.handle, account.edition);
+
+    if (preset === 'executive') {
+      sigText = `\n\n--\n✦ ${userDisplayName.toUpperCase()}\nFounder & Executive Officer · Chase Studios\nDirect: ${address}\n"Every Genre. No Limits."`;
+    } else if (preset === 'royal') {
+      sigText = `\n\n--\n👑 ${userDisplayName}\nRoyal VIP Edition · Chase Studios\nDispatch: ${address}`;
+    } else if (preset === 'vanguard') {
+      sigText = `\n\n--\n🛡 ${userDisplayName}\nVanguard Tactical Division · Chase Mail Network\nVerified: ${address} [TLS Encrypted]`;
+    } else if (preset === 'clean') {
+      sigText = `\n\n--\nBest regards,\n${userDisplayName}\n${address}`;
+    } else if (preset === 'default') {
+      const savedSig = localStorage.getItem('chase-mail-v10:' + account.user_id);
+      if (savedSig) {
+        try {
+          const parsed = JSON.parse(savedSig);
+          if (parsed.signature) sigText = `\n\n--\n${parsed.signature}`;
+        } catch {}
+      }
+    }
+
+    if (sigText) {
+      setBody(prev => {
+        const stripped = prev.split('\n--\n')[0].trimEnd();
+        return stripped + sigText;
+      });
+    }
+  };
 
   // Autosave timer
   useEffect(() => {
@@ -126,10 +178,6 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-  };
-
-  const insertFormatting = (prefix: string, suffix: string) => {
-    setBody(prev => `${prev}${prefix}text${suffix}`);
   };
 
   const handleSend = async () => {
@@ -221,12 +269,16 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
         payloadBody += `\n\n[Attachments: ${attachments.map(a => `${a.name} (${formatFileSize(a.size)})`).join(', ')}]`;
       }
 
-      const { error } = await db.from('mail_messages').insert({
-        sender_id: account.user_id,
-        recipient_id: internalAcc.user_id,
-        subject: subject.trim() || '(No subject)',
-        body: payloadBody
-      });
+      const { data: newMsg, error } = await db
+        .from('mail_messages')
+        .insert({
+          sender_id: account.user_id,
+          recipient_id: internalAcc.user_id,
+          subject: subject.trim() || '(No subject)',
+          body: payloadBody
+        })
+        .select()
+        .single();
 
       if (error) {
         setErrorMsg(error.message);
@@ -238,7 +290,17 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
         await db.from('mail_drafts').delete().eq('id', currentDraftId);
       }
 
-      onSent(`Message sent to ${internalAcc.display_name || internalAcc.handle}!`);
+      onSent(
+        `Message sent to ${internalAcc.display_name || internalAcc.handle}!`,
+        newMsg
+          ? {
+              id: newMsg.id,
+              to: internalAcc.handle,
+              subject: newMsg.subject || subject.trim() || '(No subject)',
+              body: payloadBody
+            }
+          : undefined
+      );
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'Error sending message');
@@ -358,11 +420,28 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
             />
           </div>
 
+          <div className="composer-tab-bar">
+            <button
+              type="button"
+              className={`composer-tab-btn ${activeComposerTab === 'write' ? 'active' : ''}`}
+              onClick={() => setActiveComposerTab('write')}
+            >
+              ✎ Write
+            </button>
+            <button
+              type="button"
+              className={`composer-tab-btn ${activeComposerTab === 'preview' ? 'active' : ''}`}
+              onClick={() => setActiveComposerTab('preview')}
+            >
+              👁 Preview
+            </button>
+          </div>
+
           <div className="compose-toolbar">
             <button
               type="button"
               className="toolbar-btn"
-              onClick={() => insertFormatting('**', '**')}
+              onClick={() => insertFormatting('**', '**', 'bold text')}
               title="Bold"
             >
               <b>B</b>
@@ -370,7 +449,7 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
             <button
               type="button"
               className="toolbar-btn"
-              onClick={() => insertFormatting('*', '*')}
+              onClick={() => insertFormatting('*', '*', 'italic text')}
               title="Italic"
             >
               <i>I</i>
@@ -378,7 +457,23 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
             <button
               type="button"
               className="toolbar-btn"
-              onClick={() => insertFormatting('> ', '')}
+              onClick={() => insertFormatting('<u>', '</u>', 'underlined')}
+              title="Underline"
+            >
+              <u>U</u>
+            </button>
+            <button
+              type="button"
+              className="toolbar-btn"
+              onClick={() => insertFormatting('~~', '~~', 'strikethrough')}
+              title="Strikethrough"
+            >
+              <s>S</s>
+            </button>
+            <button
+              type="button"
+              className="toolbar-btn"
+              onClick={() => insertFormatting('> ', '', 'quote')}
               title="Quote"
             >
               ❝ Quote
@@ -386,11 +481,55 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
             <button
               type="button"
               className="toolbar-btn"
-              onClick={() => insertFormatting('- ', '')}
+              onClick={() => insertFormatting('- ', '', 'list item')}
               title="Bullet list"
             >
               • List
             </button>
+            <button
+              type="button"
+              className="toolbar-btn"
+              onClick={() => insertFormatting('1. ', '', 'numbered item')}
+              title="Numbered list"
+            >
+              1. List
+            </button>
+            <button
+              type="button"
+              className="toolbar-btn"
+              onClick={() => insertFormatting('`', '`', 'code')}
+              title="Inline code"
+            >
+              {'</>'}
+            </button>
+            <button
+              type="button"
+              className="toolbar-btn"
+              onClick={() => insertFormatting('[', '](https://)', 'Link text')}
+              title="Insert link"
+            >
+              🔗
+            </button>
+
+            <select
+              className="sig-preset-select"
+              title="Insert signature preset"
+              onChange={e => {
+                if (e.target.value) {
+                  handleApplySignature(e.target.value);
+                  e.target.value = '';
+                }
+              }}
+              defaultValue=""
+            >
+              <option value="" disabled>✍ Signatures...</option>
+              <option value="default">Default Profile Signature</option>
+              <option value="executive">✦ Executive / Founder</option>
+              <option value="royal">👑 Royal VIP Edition</option>
+              <option value="vanguard">🛡 Vanguard Verified</option>
+              <option value="clean">Clean Minimal</option>
+            </select>
+
             <button
               type="button"
               className={'toolbar-btn ' + (isHtml ? 'active' : '')}
@@ -412,12 +551,27 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
           </div>
 
           <div className="compose-editor">
-            <textarea
-              rows={10}
-              placeholder="Write your message here... Signature is inserted automatically."
-              value={body}
-              onChange={e => setBody(e.target.value)}
-            />
+            {activeComposerTab === 'write' ? (
+              <textarea
+                ref={textareaRef}
+                rows={10}
+                placeholder="Write your message here... You can use Markdown or select signature presets."
+                value={body}
+                onChange={e => setBody(e.target.value)}
+              />
+            ) : (
+              <div className="compose-preview-pane">
+                {body.trim() ? (
+                  <div className="preview-rendered">
+                    <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>
+                      {body}
+                    </pre>
+                  </div>
+                ) : (
+                  <p className="preview-placeholder">Nothing to preview yet. Switch back to Write tab to compose.</p>
+                )}
+              </div>
+            )}
           </div>
 
           {attachments.length > 0 && (
