@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createClient, Session } from '@supabase/supabase-js';
 import './style.css';
@@ -17,6 +17,11 @@ import {
   showSystemNotification,
   requestNotificationPermission
 } from './lib/notifications';
+import {
+  groupMessagesIntoThreads,
+  normalizeSubject,
+  MailThread
+} from './lib/threads';
 
 const url =
   import.meta.env.VITE_SUPABASE_URL || 'https://rvetucuqburqnrgoatui.supabase.co';
@@ -155,6 +160,7 @@ function App() {
   const [composeInitialSubject, setComposeInitialSubject] = useState('');
   const [composeInitialBody, setComposeInitialBody] = useState('');
   const [opened, setOpened] = useState<Mail | null>(null);
+  const [openedThreadMails, setOpenedThreadMails] = useState<Mail[]>([]);
   const [busy, setBusy] = useState(false);
 
   // Registration Edition & Access Code State
@@ -548,9 +554,43 @@ function App() {
     setExternalOpened(m);
   }
 
-  // Open & Mark as Read
+  // Open & Mark as Read (supports individual mail and stacked conversation threads)
+  async function openThread(thread: MailThread) {
+    setOpened(thread.latestMessage);
+    setOpenedThreadMails(thread.messages);
+
+    // Mark any unread messages in the thread as read
+    if (db && session) {
+      const unreadInThread = thread.messages.filter(
+        m => m.recipient_id === session.user.id && !m.recipient_read_at
+      );
+      if (unreadInThread.length > 0) {
+        const unreadIds = unreadInThread.map(m => m.id);
+        const { error } = await db
+          .from('mail_messages')
+          .update({ recipient_read_at: new Date().toISOString() })
+          .in('id', unreadIds);
+        if (!error) {
+          await refresh(session.user.id);
+        }
+      }
+    }
+  }
+
   async function openMail(m: Mail) {
+    // If mail belongs to a thread, find its thread messages
+    const normSubj = normalizeSubject(m.subject || '');
+    const otherId = m.sender_id === session?.user.id ? m.recipient_id : m.sender_id;
+    const threadMails = mails.filter(x => {
+      const xNorm = normalizeSubject(x.subject || '');
+      const xOther = x.sender_id === session?.user.id ? x.recipient_id : x.sender_id;
+      return xNorm === normSubj && xOther === otherId;
+    });
+    threadMails.sort((a, b) => new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime());
+
     setOpened(m);
+    setOpenedThreadMails(threadMails.length > 0 ? threadMails : [m]);
+
     if (db && session?.user.id === m.recipient_id && !m.recipient_read_at) {
       const { error } = await db
         .from('mail_messages')
@@ -559,6 +599,36 @@ function App() {
       if (!error) {
         await refresh(session.user.id);
       }
+    }
+  }
+
+  // Quick Inline Reply from Thread View
+  async function handleQuickSend(toUserId: string, subject: string, body: string): Promise<boolean> {
+    if (!db || !session) return false;
+    try {
+      const { data: newMsg, error } = await db.from('mail_messages').insert({
+        sender_id: session.user.id,
+        recipient_id: toUserId,
+        subject,
+        body,
+        sent_at: new Date().toISOString()
+      }).select().single();
+
+      if (error) {
+        setNotice(`Failed to send reply: ${error.message}`);
+        return false;
+      }
+
+      setNotice('Reply dispatched.');
+      playChimeSound();
+      await refresh(session.user.id);
+      if (newMsg) {
+        setOpenedThreadMails(prev => [...prev, newMsg]);
+      }
+      return true;
+    } catch (err: any) {
+      setNotice(`Send error: ${err.message}`);
+      return false;
     }
   }
 
@@ -748,6 +818,12 @@ function App() {
       v.toLowerCase().includes(searchString)
     );
   });
+
+  // Group visible messages into stacked conversation threads
+  const visibleThreads = useMemo(() => {
+    if (!session?.user?.id) return [];
+    return groupMessagesIntoThreads(visible, mails, session.user.id, starredIds);
+  }, [visible, mails, session?.user?.id, starredIds]);
 
   const who = (id: string) => {
     const a = accounts.find(x => x.user_id === id);
@@ -1481,13 +1557,17 @@ function App() {
             opened ? (
               <MessageDetail
                 mail={opened}
+                threadMails={openedThreadMails}
                 currentUserId={session.user.id}
                 accounts={accounts}
                 folder={folder}
                 isStarred={starredIds.has(opened.id)}
                 isArchived={archivedIds.has(opened.id)}
                 isSpam={spamIds.has(opened.id)}
-                onBack={() => setOpened(null)}
+                onBack={() => {
+                  setOpened(null);
+                  setOpenedThreadMails([]);
+                }}
                 onReply={handleReply}
                 onReplyAll={handleReplyAll}
                 onForward={handleForward}
@@ -1495,6 +1575,7 @@ function App() {
                 onToggleStar={handleToggleStar}
                 onToggleArchive={handleToggleArchive}
                 onToggleSpam={handleToggleSpam}
+                onQuickSend={handleQuickSend}
               />
             ) : /* Standard Mail Folders (Inbox, Starred, Sent, Drafts, Archive, Spam, Trash) */
             (
@@ -1580,7 +1661,7 @@ function App() {
                       />
                     </label>
 
-                    {visible.length === 0 ? (
+                    {visibleThreads.length === 0 ? (
                       <p className="empty">
                         {folder === 'inbox'
                           ? 'No messages yet. Your Chase Mail journey starts here.'
@@ -1596,54 +1677,75 @@ function App() {
                       </p>
                     ) : (
                       <div className="messages">
-                        {visible.map(m => (
-                          <div
-                            key={m.id}
-                            className={
-                              'message ' +
-                              (folder === 'inbox' && !m.recipient_read_at ? 'unread' : '')
-                            }
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => void openMail(m)}
-                          >
-                            <span>
-                              {who(folder === 'sent' ? m.recipient_id : m.sender_id)}
-                            </span>
-                            <strong>
-                              {starredIds.has(m.id) ? '★ ' : ''}
-                              {m.subject || '(No subject)'}
-                            </strong>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <small>{new Date(m.sent_at).toLocaleString()}</small>
-                              <button
-                                className="link"
-                                style={{
-                                  color: starredIds.has(m.id) ? '#ffc83b' : '#a998be',
-                                  fontSize: '16px',
-                                  padding: '0 4px'
-                                }}
-                                title={starredIds.has(m.id) ? 'Unstar' : 'Star'}
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  handleToggleStar(m.id);
-                                }}
-                              >
-                                {starredIds.has(m.id) ? '★' : '☆'}
-                              </button>
-                              <button
-                                className="link"
-                                style={{ color: '#ff7b7b', padding: '0 4px', fontSize: '13px' }}
-                                title="Delete message"
-                                onClick={e => {
-                                  e.stopPropagation();
-                                  void handleDeleteMail(m.id);
-                                }}
-                              >
-                                ✕
-                              </button>
+                        {visibleThreads.map(thread => {
+                          const otherParticipantId =
+                            thread.participantIds.find(id => id !== session.user.id) ||
+                            thread.latestMessage.sender_id;
+                          return (
+                            <div
+                              key={thread.threadKey}
+                              className={
+                                'message ' +
+                                (thread.unread ? 'unread ' : '') +
+                                (thread.count > 1 ? 'stacked-thread' : '')
+                              }
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => void openThread(thread)}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>{who(otherParticipantId)}</span>
+                                {thread.count > 1 && (
+                                  <span
+                                    className="thread-count-pill"
+                                    title={`${thread.count} stacked messages in this conversation`}
+                                  >
+                                    {thread.count}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+                                <strong>
+                                  {thread.starred ? '★ ' : ''}
+                                  {thread.subject}
+                                </strong>
+                                <span style={{ fontSize: '0.8rem', color: '#a89bb8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {thread.latestMessage.body.replace(/\n/g, ' ').slice(0, 80)}
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <small>{new Date(thread.latestMessage.sent_at).toLocaleString()}</small>
+                                <button
+                                  className="link"
+                                  style={{
+                                    color: thread.starred ? '#ffc83b' : '#a998be',
+                                    fontSize: '16px',
+                                    padding: '0 4px'
+                                  }}
+                                  title={thread.starred ? 'Unstar' : 'Star'}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    handleToggleStar(thread.latestMessage.id);
+                                  }}
+                                >
+                                  {thread.starred ? '★' : '☆'}
+                                </button>
+                                <button
+                                  className="link"
+                                  style={{ color: '#ff7b7b', padding: '0 4px', fontSize: '13px' }}
+                                  title="Delete conversation"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    for (const msg of thread.messages) {
+                                      void handleDeleteMail(msg.id);
+                                    }
+                                  }}
+                                >
+                                  ✕
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </>

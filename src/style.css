@@ -1380,3 +1380,156 @@ body.gold-trim button:not(.side):not(.link):not(.danger-btn) {
   color: #a89bb8;
 }
 
+/* ============================================================
+   Conversation Thread Stacking & Modern Stacked Email Views
+   ============================================================ */
+.message.stacked-thread {
+  position: relative;
+  box-shadow: 0 4px 0 -1px rgba(74, 51, 97, 0.6), 0 8px 0 -2px rgba(35, 23, 49, 0.8), 0 12px 24px rgba(0, 0, 0, 0.4);
+  margin-bottom: 6px;
+}
+.thread-count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #8648eb, #632bd6);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 12px;
+  margin-left: 6px;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 6px rgba(134, 72, 235, 0.35);
+}
+.conversation-thread-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 0;
+}
+.thread-card {
+  background: linear-gradient(135deg, #1f152d, #161022);
+  border: 1px solid #48335f;
+  border-radius: 14px;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.thread-card.collapsed {
+  opacity: 0.88;
+  cursor: pointer;
+}
+.thread-card.collapsed:hover {
+  opacity: 1;
+  border-color: #8648eb;
+}
+.thread-card.expanded {
+  border-color: #8648eb;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4), 0 0 14px rgba(134, 72, 235, 0.15);
+}
+.thread-card.outgoing {
+  border-left: 4px solid #64dcff;
+}
+.thread-card.incoming {
+  border-left: 4px solid #d4af37;
+}
+.thread-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  gap: 12px;
+}
+.thread-card-sender-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 140px;
+}
+.thread-sender-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8648eb, #4d23a3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: #fff;
+  flex-shrink: 0;
+}
+.thread-sender-text {
+  display: flex;
+  flex-direction: column;
+}
+.thread-sender-handle {
+  font-size: 0.75rem;
+  color: #b7a7c8;
+}
+.thread-collapsed-snippet {
+  flex: 1;
+  font-size: 0.82rem;
+  color: #a99bb8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.thread-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #b7a7c8;
+  font-size: 0.78rem;
+  flex-shrink: 0;
+}
+.thread-expand-btn {
+  background: transparent !important;
+  border: none !important;
+  color: #b7a7c8 !important;
+  font-size: 0.7rem !important;
+  padding: 4px 6px !important;
+  min-height: auto !important;
+}
+.thread-card-body-section {
+  padding: 0 18px 18px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+.thread-stack-badge {
+  background: rgba(212, 175, 55, 0.15);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  color: #ffd700;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.03em;
+}
+.quick-reply-box {
+  background: linear-gradient(135deg, #1b1228, #140d1f);
+  border: 1px solid #604077;
+  border-radius: 14px;
+  padding: 16px;
+  margin-top: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.quick-reply-box textarea {
+  width: 100%;
+  border: 1px solid #4d3366;
+  border-radius: 10px;
+  background: #0f0a17;
+  color: #fff;
+  padding: 12px;
+  outline: none;
+  font-size: 0.9rem;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.quick-reply-box textarea:focus {
+  border-color: #8648eb;
+  box-shadow: 0 0 0 2px rgba(134, 72, 235, 0.3);
+}
+
+

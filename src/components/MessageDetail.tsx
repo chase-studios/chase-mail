@@ -4,6 +4,7 @@ import { plannedAddress } from '../lib/tiers';
 
 interface MessageDetailProps {
   mail: Mail;
+  threadMails?: Mail[];
   currentUserId: string;
   accounts: Account[];
   folder: string;
@@ -18,10 +19,12 @@ interface MessageDetailProps {
   onToggleStar: (mailId: string) => void;
   onToggleArchive: (mailId: string) => void;
   onToggleSpam: (mailId: string) => void;
+  onQuickSend?: (toUserId: string, subject: string, body: string) => Promise<boolean>;
 }
 
 export const MessageDetail: React.FC<MessageDetailProps> = ({
   mail,
+  threadMails,
   currentUserId,
   accounts,
   folder,
@@ -35,12 +38,40 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
   onDelete,
   onToggleStar,
   onToggleArchive,
-  onToggleSpam
+  onToggleSpam,
+  onQuickSend
 }) => {
   const [previewAttachment, setPreviewAttachment] = useState<MailAttachment | null>(null);
 
-  const senderAcc = accounts.find(a => a.user_id === mail.sender_id);
-  const recipientAcc = accounts.find(a => a.user_id === mail.recipient_id);
+  // In stacked thread mode, threadMails contains all messages chronologically (oldest to newest)
+  const displayMails = threadMails && threadMails.length > 0 ? threadMails : [mail];
+  const isThread = displayMails.length > 1;
+  const latestMail = displayMails[displayMails.length - 1];
+
+  // Expanded message IDs in the conversation stack (the newest message is expanded by default)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
+    return new Set<string>([latestMail.id]);
+  });
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        // Keep at least one message open
+        if (next.size > 1) next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Quick reply inline input state
+  const [quickReplyText, setQuickReplyText] = useState('');
+  const [quickReplyBusy, setQuickReplyBusy] = useState(false);
+
+  const senderAcc = accounts.find(a => a.user_id === latestMail.sender_id);
+  const recipientAcc = accounts.find(a => a.user_id === latestMail.recipient_id);
 
   const senderDisplayName = senderAcc
     ? `${senderAcc.display_name || senderAcc.handle} <${plannedAddress(
@@ -56,27 +87,46 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
       )}>`
     : 'Chase Mail user';
 
-  const isSender = mail.sender_id === currentUserId;
+  const otherUserId = latestMail.sender_id === currentUserId ? latestMail.recipient_id : latestMail.sender_id;
+  const otherAcc = accounts.find(a => a.user_id === otherUserId);
+  const otherName = otherAcc ? (otherAcc.display_name || otherAcc.handle) : 'user';
+
+  // Handle Quick Reply submit
+  const handleQuickReplySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickReplyText.trim() || !onQuickSend) return;
+    setQuickReplyBusy(true);
+
+    const cleanSubject = latestMail.subject.startsWith('Re:')
+      ? latestMail.subject
+      : `Re: ${latestMail.subject}`;
+
+    const ok = await onQuickSend(otherUserId, cleanSubject, quickReplyText.trim());
+    setQuickReplyBusy(false);
+    if (ok) {
+      setQuickReplyText('');
+    }
+  };
 
   // Export as RFC 822 .eml file
   const handleExportEml = () => {
     const emlContent = [
       `From: ${senderDisplayName}`,
       `To: ${recipientDisplayName}`,
-      `Subject: ${mail.subject}`,
-      `Date: ${new Date(mail.sent_at).toUTCString()}`,
-      `Message-ID: <${mail.id}@chasemail.com>`,
+      `Subject: ${latestMail.subject}`,
+      `Date: ${new Date(latestMail.sent_at).toUTCString()}`,
+      `Message-ID: <${latestMail.id}@chasemail.com>`,
       `MIME-Version: 1.0`,
       `Content-Type: text/plain; charset=UTF-8`,
       ``,
-      mail.body
+      latestMail.body
     ].join('\r\n');
 
     const blob = new Blob([emlContent], { type: 'message/rfc822' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${mail.subject.replace(/[^a-z0-9_-]/gi, '_') || 'message'}.eml`;
+    a.download = `${latestMail.subject.replace(/[^a-z0-9_-]/gi, '_') || 'message'}.eml`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -115,7 +165,7 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
         <div className="toolbar-actions">
           <button
             className={'icon-action-btn ' + (isStarred ? 'starred' : '')}
-            onClick={() => onToggleStar(mail.id)}
+            onClick={() => onToggleStar(latestMail.id)}
             title={isStarred ? 'Unstar' : 'Star message'}
           >
             {isStarred ? '★ Starred' : '☆ Star'}
@@ -123,7 +173,7 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
 
           <button
             className="icon-action-btn"
-            onClick={() => onToggleArchive(mail.id)}
+            onClick={() => onToggleArchive(latestMail.id)}
             title={isArchived ? 'Move to Inbox' : 'Archive message'}
           >
             {isArchived ? '📥 Unarchive' : '📦 Archive'}
@@ -131,7 +181,7 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
 
           <button
             className="icon-action-btn"
-            onClick={() => onToggleSpam(mail.id)}
+            onClick={() => onToggleSpam(latestMail.id)}
             title={isSpam ? 'Mark as Not Spam' : 'Report Spam'}
           >
             {isSpam ? '✓ Not Spam' : '🚫 Spam'}
@@ -147,7 +197,7 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
 
           <button
             className="icon-action-btn danger-btn"
-            onClick={() => onDelete(mail.id)}
+            onClick={() => onDelete(latestMail.id)}
             title="Delete message"
           >
             🗑 Delete
@@ -155,82 +205,122 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
         </div>
       </div>
 
-      {/* Message Header Card */}
+      {/* Thread Title Header */}
       <div className="detail-header-card">
         <div className="detail-title-row">
-          <h1>{mail.subject || '(No subject)'}</h1>
-          <span className="security-badge" title="Protected via Supabase Row-Level Security & TLS">
-            🔒 TLS Encrypted
-          </span>
-        </div>
-
-        <div className="detail-meta-grid">
-          <div className="meta-field">
-            <span className="meta-label">From:</span>
-            <span className="meta-value">{senderDisplayName}</span>
-          </div>
-          <div className="meta-field">
-            <span className="meta-label">To:</span>
-            <span className="meta-value">{recipientDisplayName}</span>
-          </div>
-          <div className="meta-field">
-            <span className="meta-label">Date:</span>
-            <span className="meta-value">
-              {new Date(mail.sent_at).toLocaleString()} (
-              {new Date(mail.sent_at).toUTCString()})
+          <h1>{latestMail.subject || '(No subject)'}</h1>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {isThread && (
+              <span className="thread-stack-badge">
+                ✦ {displayMails.length} Messages in Thread
+              </span>
+            )}
+            <span className="security-badge" title="Protected via Supabase Row-Level Security & TLS">
+              🔒 TLS Encrypted
             </span>
           </div>
-          {mail.recipient_read_at && (
-            <div className="meta-field">
-              <span className="meta-label">Read:</span>
-              <span className="meta-value">
-                ✓ Read on {new Date(mail.recipient_read_at).toLocaleTimeString()}
-              </span>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Message Body */}
-      <article className="detail-body-container">{renderBody(mail.body)}</article>
+      {/* Stacked Conversation Messages */}
+      <div className="conversation-thread-stack">
+        {displayMails.map((m, idx) => {
+          const isExpanded = expandedIds.has(m.id);
+          const isMsgSender = m.sender_id === currentUserId;
+          const msgSenderAcc = accounts.find(a => a.user_id === m.sender_id);
+          const msgSenderName = isMsgSender
+            ? 'You'
+            : msgSenderAcc?.display_name || msgSenderAcc?.handle || 'Chase Mail user';
+          const msgSenderHandle = msgSenderAcc ? `@${msgSenderAcc.handle}` : '';
+          const msgSenderEmail = msgSenderAcc
+            ? plannedAddress(msgSenderAcc.handle, msgSenderAcc.edition)
+            : 'user@chasemail.com';
 
-      {/* Attachments (if any attached in mail) */}
-      {mail.attachments && mail.attachments.length > 0 && (
-        <div className="detail-attachments-box">
-          <h4>Attachments ({mail.attachments.length})</h4>
-          <div className="attachment-tiles">
-            {mail.attachments.map(att => (
-              <div key={att.id} className="attachment-tile">
-                <span className="tile-icon">📎</span>
-                <div className="tile-info">
-                  <strong>{att.name}</strong>
-                  <small>{(att.size / 1024).toFixed(1)} KB</small>
+          return (
+            <div
+              key={m.id}
+              className={`thread-card ${isExpanded ? 'expanded' : 'collapsed'} ${
+                isMsgSender ? 'outgoing' : 'incoming'
+              }`}
+            >
+              <div className="thread-card-header" onClick={() => toggleExpand(m.id)}>
+                <div className="thread-card-sender-info">
+                  <div className="thread-sender-avatar">
+                    {msgSenderName.slice(0, 1).toUpperCase()}
+                  </div>
+                  <div className="thread-sender-text">
+                    <strong>{msgSenderName}</strong>
+                    <span className="thread-sender-handle">{msgSenderHandle} &lt;{msgSenderEmail}&gt;</span>
+                  </div>
                 </div>
-                <div className="tile-actions">
-                  {att.dataUrl && att.type.startsWith('image/') && (
-                    <button
-                      className="link"
-                      onClick={() => setPreviewAttachment(att)}
-                    >
-                      Preview
-                    </button>
-                  )}
-                  {att.dataUrl && (
-                    <a
-                      href={att.dataUrl}
-                      download={att.name}
-                      className="link"
-                      style={{ textDecoration: 'none' }}
-                    >
-                      Download
-                    </a>
-                  )}
+
+                {!isExpanded && (
+                  <div className="thread-collapsed-snippet">
+                    {m.body.replace(/\n/g, ' ').slice(0, 75)}...
+                  </div>
+                )}
+
+                <div className="thread-card-meta">
+                  <small>{new Date(m.sent_at).toLocaleString()}</small>
+                  <button type="button" className="thread-expand-btn">
+                    {isExpanded ? '▲' : '▼'}
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+
+              {isExpanded && (
+                <div className="thread-card-body-section">
+                  <article className="detail-body-container">{renderBody(m.body)}</article>
+
+                  {/* Attachments (if any attached in mail) */}
+                  {m.attachments && m.attachments.length > 0 && (
+                    <div className="detail-attachments-box">
+                      <h4>Attachments ({m.attachments.length})</h4>
+                      <div className="attachment-tiles">
+                        {m.attachments.map(att => (
+                          <div key={att.id} className="attachment-tile">
+                            <span className="tile-icon">📎</span>
+                            <div className="tile-info">
+                              <strong>{att.name}</strong>
+                              <small>{(att.size / 1024).toFixed(1)} KB</small>
+                            </div>
+                            <div className="tile-actions">
+                              {att.dataUrl && att.type.startsWith('image/') && (
+                                <button
+                                  className="link"
+                                  onClick={() => setPreviewAttachment(att)}
+                                >
+                                  Preview
+                                </button>
+                              )}
+                              {att.dataUrl && (
+                                <a
+                                  href={att.dataUrl}
+                                  download={att.name}
+                                  className="link"
+                                  style={{ textDecoration: 'none' }}
+                                >
+                                  Download
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {m.recipient_read_at && (
+                    <div style={{ marginTop: '8px', fontSize: '0.75rem', color: '#8fe2ff' }}>
+                      ✓ Read on {new Date(m.recipient_read_at).toLocaleTimeString()}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
       {/* Attachment Preview Modal */}
       {previewAttachment && (
@@ -255,13 +345,48 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
         </div>
       )}
 
+      {/* Quick Reply Box */}
+      {onQuickSend && folder !== 'trash' && folder !== 'spam' && (
+        <form onSubmit={handleQuickReplySubmit} className="quick-reply-box">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <span style={{ fontWeight: 600, fontSize: '0.88rem', color: '#ba8cff' }}>
+              ✦ Quick Reply to {otherName}
+            </span>
+            <button
+              type="button"
+              className="link"
+              style={{ fontSize: '0.8rem', padding: '2px 6px' }}
+              onClick={() => onReply(latestMail)}
+            >
+              Full Editor ✎
+            </button>
+          </div>
+          <textarea
+            rows={3}
+            value={quickReplyText}
+            onChange={e => setQuickReplyText(e.target.value)}
+            placeholder={`Write a quick reply to @${otherAcc?.handle || 'user'}...`}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' }}>
+            <button
+              type="submit"
+              disabled={!quickReplyText.trim() || quickReplyBusy}
+              className="primary-btn"
+              style={{ padding: '8px 18px', fontSize: '0.85rem' }}
+            >
+              {quickReplyBusy ? 'Sending...' : 'Send Reply ↗'}
+            </button>
+          </div>
+        </form>
+      )}
+
       {/* Bottom Reply/Forward Actions */}
       <div className="detail-bottom-actions">
-        <button className="primary-btn" onClick={() => onReply(mail)}>
+        <button className="primary-btn" onClick={() => onReply(latestMail)}>
           ↩ Reply
         </button>
-        <button onClick={() => onReplyAll(mail)}>👥 Reply All</button>
-        <button onClick={() => onForward(mail)}>➜ Forward</button>
+        <button onClick={() => onReplyAll(latestMail)}>👥 Reply All</button>
+        <button onClick={() => onForward(latestMail)}>➜ Forward</button>
       </div>
     </div>
   );
