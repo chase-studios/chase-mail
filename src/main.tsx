@@ -14,8 +14,12 @@ import { SnoozeModal } from './components/SnoozeModal';
 import { DriveVault } from './components/DriveVault';
 import { CalendarView } from './components/CalendarView';
 import { LockShieldModal } from './components/LockShieldModal';
+import { TaskBoard } from './components/TaskBoard';
+import { AnalyticsPulse } from './components/AnalyticsPulse';
+import { InboxRules } from './components/InboxRules';
+import { ContactsView } from './components/ContactsView';
 import { playMailSound } from './lib/soundFx';
-import { Account, Mail, Draft, Contact, ExternalMail, AccountTier, MailLabel, ScheduledMessage, CalendarEvent } from './lib/types';
+import { Account, Mail, Draft, Contact, ExternalMail, AccountTier, MailLabel, ScheduledMessage, CalendarEvent, AppTheme, TaskItem } from './lib/types';
 import { getAutoResponderConfig, shouldSendAutoReply, recordAutoReplySent } from './lib/autoResponder';
 import { plannedAddress, getTier, TIERS } from './lib/tiers';
 import { validateRegistrationCode } from './lib/accessCodes';
@@ -41,10 +45,13 @@ const db = url && key ? createClient(url, key) : null;
 export type FolderType =
   | 'inbox'
   | 'starred'
+  | 'snoozed'
+  | 'tasks'
+  | 'analytics'
+  | 'rules'
+  | 'calendar'
   | 'sent'
   | 'drafts'
-  | 'snoozed'
-  | 'calendar'
   | 'drive'
   | 'archive'
   | 'spam'
@@ -86,14 +93,23 @@ function App() {
     () => localStorage.getItem('chase-mail-pet-visible') !== 'false'
   );
 
-  const [theme, setTheme] = useState<'purple' | 'midnight' | 'light'>(() => {
+  const [theme, setTheme] = useState<AppTheme>(() => {
     try {
       const t = localStorage.getItem('chase-mail-theme');
-      return t === 'midnight' || t === 'light' ? t : 'purple';
-    } catch {
-      return 'purple';
-    }
+      if (t && ['purple', 'midnight', 'royal-gold', 'cyber-vanguard', 'oled', 'horizon'].includes(t)) {
+        return t as AppTheme;
+      }
+    } catch {}
+    return 'purple';
   });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    try {
+      localStorage.setItem('chase-mail-theme', theme);
+    } catch {}
+    playMailSound('theme');
+  }, [theme]);
 
   // Mail, Contacts, and Drafts State
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -890,6 +906,55 @@ function App() {
     }
   }
 
+  // Add task from email directly to Kanban Board
+  function handleAddTaskFromMail(m: Mail) {
+    if (!session) return;
+    const key = 'chase-mail-tasks:' + session.user.id;
+    let existing: TaskItem[] = [];
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) existing = JSON.parse(raw);
+    } catch {}
+
+    const senderAcc = accounts.find(a => a.user_id === m.sender_id);
+    const senderName = senderAcc ? senderAcc.display_name || senderAcc.handle : (m.external_from || 'External Correspondent');
+
+    const newTask: TaskItem = {
+      id: 'task_' + Date.now(),
+      mailId: m.id,
+      title: m.subject.replace(/^(re:\s*|fwd:\s*)+/i, '').trim() || 'Review Studio Thread',
+      description: `From: ${senderName}\n\n${(m.body || '').slice(0, 240)}...`,
+      sender: senderName,
+      column: 'inbox',
+      priority: 'high',
+      dueDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+      createdAt: new Date().toISOString()
+    };
+
+    try {
+      localStorage.setItem(key, JSON.stringify([newTask, ...existing]));
+    } catch {}
+    playMailSound('action');
+    setNotice(`Added "${newTask.title}" to Studio Task Board!`);
+  }
+
+  async function addContactDirect(cName: string, cEmail: string) {
+    if (!db || !session || !cName.trim() || !cEmail.trim()) return;
+    setBusy(true);
+    const { error } = await db.from('mail_contacts').insert({
+      owner_id: session.user.id,
+      name: cName.trim(),
+      email: cEmail.trim().toLowerCase()
+    });
+    setBusy(false);
+    if (error) {
+      setNotice(error.message);
+      return;
+    }
+    await refresh(session.user.id);
+    setNotice(`Added contact ${cName}!`);
+  }
+
   // Reply
   function handleReply(original: Mail) {
     const senderAcc = accounts.find(a => a.user_id === original.sender_id);
@@ -1450,7 +1515,8 @@ function App() {
               <option value="royal-gold">👑 Royal Gold Sovereign</option>
               <option value="cyber-vanguard">🛡 Cyber Vanguard</option>
               <option value="oled">🖤 OLED Pure Pitch</option>
-              <option value="light">☀️ Studio Horizon</option>
+              <option value="midnight">🌙 Midnight Nebula</option>
+              <option value="horizon">☀️ Studio Horizon</option>
             </select>
           </label>
 
@@ -1916,6 +1982,39 @@ function App() {
             </button>
 
             <button
+              className={'side ' + (folder === 'tasks' && !opened ? 'active' : '')}
+              onClick={() => {
+                setFolder('tasks');
+                setOpened(null);
+                setExternalOpened(null);
+              }}
+            >
+              📋 Studio Tasks
+            </button>
+
+            <button
+              className={'side ' + (folder === 'analytics' && !opened ? 'active' : '')}
+              onClick={() => {
+                setFolder('analytics');
+                setOpened(null);
+                setExternalOpened(null);
+              }}
+            >
+              📊 Studio Pulse
+            </button>
+
+            <button
+              className={'side ' + (folder === 'rules' && !opened ? 'active' : '')}
+              onClick={() => {
+                setFolder('rules');
+                setOpened(null);
+                setExternalOpened(null);
+              }}
+            >
+              ⚡ Inbox Rules
+            </button>
+
+            <button
               className={'side ' + (folder === 'snoozed' && !opened ? 'active' : '')}
               onClick={() => {
                 setFolder('snoozed');
@@ -2116,66 +2215,86 @@ function App() {
               />
             ) : /* Folder: Contacts */
             folder === 'contacts' ? (
-              <>
-                <h1>👥 Contacts</h1>
-                <form
-                  onSubmit={e => {
-                    e.preventDefault();
-                    void addContact();
-                  }}
-                >
-                  <label>
-                    Name
-                    <input
-                      required
-                      maxLength={120}
-                      value={contactName}
-                      onChange={e => setContactName(e.target.value)}
-                    />
-                  </label>
-                  <label>
-                    Email
-                    <input
-                      required
-                      type="email"
-                      maxLength={254}
-                      value={contactEmail}
-                      onChange={e => setContactEmail(e.target.value)}
-                    />
-                  </label>
-                  <button disabled={busy}>Add contact</button>
-                </form>
-                <div className="messages" style={{ marginTop: '20px' }}>
-                  {contacts.map(c => (
-                    <div key={c.id} className="message">
-                      <strong>{c.name}</strong>
-                      <span>{c.email}</span>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          onClick={() => {
-                            setComposeInitialTo(c.email);
-                            setComposeInitialSubject('');
-                            let initialBody = '';
-                            if (session) {
-                              const sig = getUserSignature(session.user.id);
-                              if (sig) initialBody = `\n\n--\n${sig}`;
-                            }
-                            setComposeInitialBody(initialBody);
-                            setSelectedDraftId(null);
-                            setComposeOpen(true);
-                          }}
-                        >
-                          Compose
-                        </button>
-                        <button className="link" onClick={() => void removeContact(c.id)}>
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  {contacts.length === 0 && <p className="empty">No contacts added yet.</p>}
-                </div>
-              </>
+              <ContactsView
+                contacts={contacts}
+                mails={mails}
+                account={account}
+                busy={busy}
+                onAddContact={addContactDirect}
+                onDeleteContact={removeContact}
+                onComposeTo={(toEmail) => {
+                  setComposeInitialTo(toEmail);
+                  setComposeInitialSubject('');
+                  let initialBody = '';
+                  if (session) {
+                    const sig = getUserSignature(session.user.id);
+                    if (sig) initialBody = `\n\n--\n${sig}`;
+                  }
+                  setComposeInitialBody(initialBody);
+                  setSelectedDraftId(null);
+                  setComposeOpen(true);
+                }}
+                onFilterByContact={(cEmail) => {
+                  setSearch(cEmail);
+                  setFolder('inbox');
+                }}
+                onSetNotice={setNotice}
+              />
+            ) : /* Folder: Studio Task Board */
+            folder === 'tasks' ? (
+              <TaskBoard
+                userId={session.user.id}
+                mails={mails}
+                onOpenMail={(m) => {
+                  setOpened(m);
+                }}
+                onSetNotice={setNotice}
+              />
+            ) : /* Folder: Studio Analytics Pulse */
+            folder === 'analytics' ? (
+              <AnalyticsPulse
+                account={account || { user_id: session.user.id, handle: 'user', edition: 'community', display_name: 'User' }}
+                mails={mails}
+                contacts={contacts}
+                onComposeTo={(toEmail) => {
+                  setComposeInitialTo(toEmail);
+                  setComposeOpen(true);
+                }}
+              />
+            ) : /* Folder: Inbox Automation Rules */
+            folder === 'rules' ? (
+              <InboxRules
+                userId={session.user.id}
+                mails={mails}
+                onApplyRulesResult={(res) => {
+                  if (res.starredIds.size > 0) {
+                    setStarredIds(prev => {
+                      const next = new Set([...Array.from(prev), ...Array.from(res.starredIds)]);
+                      try { localStorage.setItem('chase-mail-starred-ids', JSON.stringify(Array.from(next))); } catch {}
+                      return next;
+                    });
+                  }
+                  if (res.archivedIds.size > 0) {
+                    setArchivedIds(prev => {
+                      const next = new Set([...Array.from(prev), ...Array.from(res.archivedIds)]);
+                      try { localStorage.setItem('chase-mail-archived-ids', JSON.stringify(Array.from(next))); } catch {}
+                      return next;
+                    });
+                  }
+                  if (res.labelsToAdd.size > 0) {
+                    setLabelsMap(prev => {
+                      const next = { ...prev };
+                      res.labelsToAdd.forEach((lbls, mId) => {
+                        const existing = next[mId] || [];
+                        next[mId] = Array.from(new Set([...existing, ...Array.from(lbls)]));
+                      });
+                      try { localStorage.setItem('chase-mail-labels-map', JSON.stringify(next)); } catch {}
+                      return next;
+                    });
+                  }
+                }}
+                onSetNotice={setNotice}
+              />
             ) : /* Folder: External Mail */
             folder === 'external' ? (
               <>
@@ -2360,6 +2479,7 @@ function App() {
                 onSnooze={m => setSnoozeTargetMail(m)}
                 onToggleLabel={handleToggleLabel}
                 onAddEvent={handleAddCalendarEvent}
+                onAddTask={handleAddTaskFromMail}
                 onQuickSend={handleQuickSend}
               />
             ) : /* Standard Mail Folders (Inbox, Starred, Snoozed, Sent, Drafts, Archive, Spam, Trash) */

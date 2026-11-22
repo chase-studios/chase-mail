@@ -25,6 +25,7 @@ interface MessageDetailProps {
   onSnooze?: (mail: Mail) => void;
   onToggleLabel?: (mailId: string, labelName: string) => void;
   onAddEvent?: (event: { title: string; date: string; category: any }) => void;
+  onAddTask?: (mail: Mail) => void;
   onQuickSend?: (toUserId: string, subject: string, body: string) => Promise<boolean>;
 }
 
@@ -50,11 +51,13 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
   onSnooze,
   onToggleLabel,
   onAddEvent,
+  onAddTask,
   onQuickSend
 }) => {
   const [previewAttachment, setPreviewAttachment] = useState<MailAttachment | null>(null);
   const [showAiSummary, setShowAiSummary] = useState(false);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
+  const [copyStatus, setCopyStatus] = useState('');
 
   // In stacked thread mode, threadMails contains all messages chronologically (oldest to newest)
   const displayMails = threadMails && threadMails.length > 0 ? threadMails : [mail];
@@ -282,12 +285,45 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
             {isSpam ? '✓ Not Spam' : '🚫 Spam'}
           </button>
 
+          {onAddTask && (
+            <button
+              className="icon-action-btn"
+              onClick={() => onAddTask(latestMail)}
+              title="Add email to Studio Task Board"
+              style={{ color: '#64dcff' }}
+            >
+              📋 Add to Tasks
+            </button>
+          )}
+
           <button
             className="icon-action-btn"
             onClick={handleExportEml}
-            title="Download .eml file"
+            title="Download standard RFC 822 .eml file"
           >
             🖨 Export .eml
+          </button>
+
+          <button
+            className="icon-action-btn"
+            onClick={() => window.print()}
+            title="Print or Save as PDF"
+          >
+            📄 Print
+          </button>
+
+          <button
+            className="icon-action-btn"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(latestMail.body);
+                setCopyStatus('Copied!');
+                setTimeout(() => setCopyStatus(''), 2000);
+              } catch {}
+            }}
+            title="Copy email body to clipboard"
+          >
+            {copyStatus ? '✓ Copied' : '📋 Copy'}
           </button>
 
           <button

@@ -38,7 +38,7 @@ function getAudioContext(): AudioContext | null {
  * High-fidelity Web Audio sound generator for system feedback
  */
 export function playMailSound(
-  event: 'receive' | 'send' | 'trash' | 'snooze' | 'action' = 'receive',
+  event: 'receive' | 'send' | 'trash' | 'snooze' | 'action' | 'star' | 'archive' | 'theme' = 'receive',
   overrideProfile?: SoundProfile
 ): void {
   const profile = overrideProfile || getSoundProfile();
@@ -67,16 +67,32 @@ export function playMailSound(
       // Gentle hourglass chime
       playTone(ctx, 659.25, now, 0.25, 0.1);
       playTone(ctx, 987.77, now + 0.1, 0.35, 0.12);
+    } else if (event === 'star') {
+      // Star shimmer sparkle
+      playTone(ctx, 1046.5, now, 0.3, 0.1);
+      playTone(ctx, 1567.98, now + 0.1, 0.5, 0.14);
+    } else if (event === 'archive') {
+      // Soft swift sweep
+      playTone(ctx, 659.25, now, 0.2, 0.08);
+      playTone(ctx, 523.25, now + 0.08, 0.25, 0.1);
+    } else if (event === 'theme') {
+      // Harmonic resonant flourish
+      playTone(ctx, 523.25, now, 0.2, 0.1);
+      playTone(ctx, 783.99, now + 0.08, 0.3, 0.12);
+      playTone(ctx, 1046.5, now + 0.16, 0.4, 0.15);
     } else if (event === 'action') {
       // Quick crisp confirmation
       playTone(ctx, 1046.5, now, 0.18, 0.1);
     }
   } else if (profile === 'cyber') {
     if (event === 'receive') {
-      // Futuristic telemetry blip
       playCyberBlip(ctx, 440, 1200, now, 0.18);
     } else if (event === 'send') {
       playCyberBlip(ctx, 600, 1600, now, 0.22);
+    } else if (event === 'star') {
+      playCyberBlip(ctx, 800, 2400, now, 0.15);
+    } else if (event === 'theme') {
+      playCyberBlip(ctx, 300, 1800, now, 0.25);
     } else if (event === 'action') {
       playCyberBlip(ctx, 700, 1400, now, 0.1);
     } else {

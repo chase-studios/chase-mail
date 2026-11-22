@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Account, Contact, MailAttachment } from '../lib/types';
 import { getTier, plannedAddress } from '../lib/tiers';
-import { polishDraftText } from '../lib/aiAssistant';
+import { polishDraftText, MAGIC_DRAFT_TEMPLATES, suggestSubjectLines } from '../lib/aiAssistant';
 import { getTemplates, saveCustomTemplate } from '../lib/templates';
 
 interface ComposeModalProps {
@@ -64,6 +64,19 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
 
   // Studio Templates
   const templates = useMemo(() => getTemplates(), []);
+
+  // AI Magic Writer & Subject Suggestions
+  const [showSubjectSuggestions, setShowSubjectSuggestions] = useState(false);
+  const [showMagicWriter, setShowMagicWriter] = useState(false);
+
+  const handleApplyMagicDraft = (templateId: string) => {
+    const tmpl = MAGIC_DRAFT_TEMPLATES.find(t => t.id === templateId);
+    if (!tmpl) return;
+    const recipientClean = to.split('@')[0].trim();
+    setSubject(tmpl.defaultSubject);
+    setBody(tmpl.bodyGenerator(recipientClean));
+    setShowMagicWriter(false);
+  };
 
   const handleApplyTemplate = (id: string) => {
     const t = templates.find(x => x.id === id);
@@ -494,13 +507,74 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
 
           <div className="compose-row">
             <label>Subject</label>
-            <input
-              type="text"
-              placeholder="Subject"
-              value={subject}
-              onChange={e => setSubject(e.target.value)}
-              maxLength={200}
-            />
+            <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <input
+                type="text"
+                placeholder="Subject"
+                value={subject}
+                onChange={e => setSubject(e.target.value)}
+                maxLength={200}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => setShowSubjectSuggestions(!showSubjectSuggestions)}
+                title="AI Subject Line Suggestions based on draft"
+                style={{ padding: '6px 10px', fontSize: '0.78rem', whiteSpace: 'nowrap', background: '#25163a', border: '1px solid #7c4db3', color: '#64dcff' }}
+              >
+                ✦ AI Subjects
+              </button>
+            </div>
+          </div>
+
+          {showSubjectSuggestions && (
+            <div className="ai-smart-replies-bar" style={{ margin: '-4px 0 10px 0', padding: '8px 12px' }}>
+              <span style={{ fontSize: '0.75rem', color: '#a894c2', fontWeight: 600 }}>✦ AI SUBJECT SUGGESTIONS:</span>
+              {suggestSubjectLines(body).map((sug, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className="ai-smart-reply-pill"
+                  onClick={() => {
+                    setSubject(sug);
+                    setShowSubjectSuggestions(false);
+                  }}
+                  style={{ textAlign: 'left' }}
+                >
+                  <span>✉</span>
+                  <span>{sug}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* AI Magic Writer Bar */}
+          <div className="magic-writer-strip">
+            <button
+              type="button"
+              className="magic-writer-trigger"
+              onClick={() => setShowMagicWriter(!showMagicWriter)}
+            >
+              <span>🪄</span>
+              <strong>AI Magic Writer</strong>
+              <small>{showMagicWriter ? '▲ Close Presets' : '▼ 1-Click Studio Drafts'}</small>
+            </button>
+            {showMagicWriter && (
+              <div className="magic-writer-pills">
+                {MAGIC_DRAFT_TEMPLATES.map(tmpl => (
+                  <button
+                    key={tmpl.id}
+                    type="button"
+                    className="magic-draft-pill"
+                    onClick={() => handleApplyMagicDraft(tmpl.id)}
+                  >
+                    <span>{tmpl.icon}</span>
+                    <span>{tmpl.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="composer-tab-bar">

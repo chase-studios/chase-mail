@@ -103,7 +103,37 @@ export type AutoResponderConfig = {
 };
 
 export type SoundProfile = 'executive' | 'cyber' | 'minimal' | 'mute';
-export type AppTheme = 'dark' | 'royal-gold' | 'cyber-vanguard' | 'oled' | 'horizon';
+export type AppTheme = 'purple' | 'midnight' | 'royal-gold' | 'cyber-vanguard' | 'oled' | 'horizon';
+
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type TaskColumn = 'inbox' | 'progress' | 'review' | 'done';
+
+export type TaskItem = {
+  id: string;
+  mailId?: string;
+  title: string;
+  description?: string;
+  sender?: string;
+  column: TaskColumn;
+  priority: TaskPriority;
+  dueDate?: string;
+  createdAt: string;
+};
+
+export type InboxRule = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  conditionField: 'from' | 'subject' | 'body';
+  conditionOperator: 'contains' | 'equals' | 'starts_with';
+  conditionValue: string;
+  actions: {
+    applyLabel?: string;
+    markStarred?: boolean;
+    markRead?: boolean;
+    archive?: boolean;
+  };
+};
 
 export type Draft = {
   id: string;

@@ -198,6 +198,117 @@ export function polishDraftText(
   return originalText;
 }
 
+export type MagicPromptType =
+  | 'sponsor_accept'
+  | 'creator_collab'
+  | 'executive_brief'
+  | 'polite_decline'
+  | 'patch_announcement'
+  | 'milestone_thanks';
+
+export interface MagicDraftTemplate {
+  id: MagicPromptType;
+  label: string;
+  icon: string;
+  defaultSubject: string;
+  bodyGenerator: (recipientName: string) => string;
+}
+
+export const MAGIC_DRAFT_TEMPLATES: MagicDraftTemplate[] = [
+  {
+    id: 'sponsor_accept',
+    label: 'Sponsorship Acceptance & Terms',
+    icon: '🤝',
+    defaultSubject: 'Partnership Agreement & Deliverables · Chase Studios',
+    bodyGenerator: (name) =>
+      `Hello ${name || 'Partnership Team'},\n\nThank you for reaching out regarding this partnership opportunity with Chase Studios.\n\nWe have reviewed the campaign brief and are excited to move forward. Our production team has reserved dedicated schedule slots for content integration.\n\nNext Steps:\n1. Please provide the final product tracking link and brand asset guidelines.\n2. We will dispatch the formal invoice and deliverable schedule via our Vanguard portal.\n\nLooking forward to a high-impact campaign together.\n\nBest regards,\nPartnerships Division · Chase Studios\n"Every Genre. No Limits."`
+  },
+  {
+    id: 'creator_collab',
+    label: 'Creator Collaboration Pitch',
+    icon: '🎮',
+    defaultSubject: 'Collaboration Proposal · Chase Studios Video & Stream Project',
+    bodyGenerator: (name) =>
+      `Hey ${name || 'there'}!\n\nI've been following your recent content and really admire what you've been building. The energy and quality align seamlessly with what we're crafting at Chase Studios.\n\nWe're currently assembling a collaborative special project (scheduled to begin production next week) and would love to feature you alongside our creators.\n\nWould you be open to jumping on a brief Discord sync or exchanging a few ideas here over email?\n\nExcited to potentially build something legendary together.\n\nCheers,\nChase Studios Team`
+  },
+  {
+    id: 'executive_brief',
+    label: 'Executive Operations Brief',
+    icon: '✦',
+    defaultSubject: 'Executive Briefing · Studio Milestones & Operational Updates',
+    bodyGenerator: (name) =>
+      `Greetings ${name || 'Team'},\n\nPlease review this week's key operational milestones across the Chase Studios network:\n\n• Infrastructure: Mailbox systems and Cloudflare email routing operating at 99.98% reliability.\n• Production: Q4 video renders and sound design pipelines on schedule.\n• Growth: Community member tier activations up across Prime, Royal, and Vanguard divisions.\n\nIf any blocking items require executive escalation, please respond directly to this dispatch.\n\nSincerely,\nExecutive Office · Chase Studios`
+  },
+  {
+    id: 'polite_decline',
+    label: 'Polite Deferral / Decline',
+    icon: '⏳',
+    defaultSubject: 'Regarding Your Inquiry · Chase Studios',
+    bodyGenerator: (name) =>
+      `Hi ${name || 'there'},\n\nThank you for considering Chase Studios and presenting this proposal. We genuinely appreciate your interest and the time you took to assemble the details.\n\nAt this current juncture, our production roadmap is entirely committed to active milestones, and we are unable to take on additional outside commitments.\n\nWe will gladly keep your contact on file and reach back out should future openings align with your expertise.\n\nWishing you continued success!\n\nBest regards,\nChase Studios`
+  },
+  {
+    id: 'patch_announcement',
+    label: 'Release & Patch Announcement',
+    icon: '⚡',
+    defaultSubject: 'Release Notes · Chase Mail Quantum Update Deployed',
+    bodyGenerator: (name) =>
+      `Hello ${name || 'Chase Community'},\n\nWe are thrilled to announce that our largest update to date is officially live across the Chase Mail network:\n\nHighlights in this release:\n✓ Studio Task Board (Kanban workflow for actionable emails)\n✓ Real-time Productivity & Storage Pulse Dashboard\n✓ Automated Inbox Rules Engine for creator mail sorting\n✓ Contact Book 2.0 with VIP Directory and vCard export\n✓ Standard RFC 822 .EML export & Print-ready sheets\n✓ 6 High-contrast Obsidian & Vanguard luxury themes\n\nExperience the live updates now at https://mail.chase-studios.org.\n\nChase Studios · "Every Genre. No Limits."`
+  },
+  {
+    id: 'milestone_thanks',
+    label: 'Milestone Celebration & Thanks',
+    icon: '🎉',
+    defaultSubject: 'Huge Milestone Reached — Thank You for Being Part of Chase Studios!',
+    bodyGenerator: (name) =>
+      `Dear ${name || 'Supporter'},\n\nToday marks a monumental milestone for Chase Studios, and we could not have achieved this without your dedication, support, and feedback.\n\nFrom our humble origins to a full-scale multi-genre entertainment network, every video, stream, code commit, and community message has brought us here.\n\nWe have incredible surprises in store for our community over the coming months. Thank you for believing in the vision!\n\nWith utmost gratitude,\nBill & The Entire Chase Studios Team`
+  }
+];
+
+/**
+ * Suggest catchy, high-engagement subject lines based on body text
+ */
+export function suggestSubjectLines(bodyText: string): string[] {
+  const clean = bodyText.trim().toLowerCase();
+  if (!clean || clean.length < 15) {
+    return [
+      'Important Update from Chase Studios',
+      'Follow-up regarding our discussion',
+      'Quick sync regarding upcoming milestones'
+    ];
+  }
+
+  const suggestions: string[] = [];
+
+  if (/sponsor|brand|deliverable|payment|deal/i.test(clean)) {
+    suggestions.push('Partnership Proposal & Campaign Deliverables');
+    suggestions.push('Confirmed: Chase Studios Sponsorship Terms');
+    suggestions.push('Brand Collaboration Next Steps');
+  } else if (/collab|video|stream|youtube|twitch/i.test(clean)) {
+    suggestions.push('Collaboration Opportunity with Chase Studios');
+    suggestions.push('Creator Special Project · Collab Idea');
+    suggestions.push('Quick Question regarding your recent content');
+  } else if (/urgent|deadline|asap|critical|block/i.test(clean)) {
+    suggestions.push('[URGENT] Immediate Review Required');
+    suggestions.push('Time-Sensitive Update: Action Required by EOD');
+    suggestions.push('Critical Priority Dispatch · Chase Studios');
+  } else if (/release|update|patch|new|announce/i.test(clean)) {
+    suggestions.push('Major Update: New Features Live in Chase Mail');
+    suggestions.push('Exciting News from Chase Studios');
+    suggestions.push('Release Notes & Changelog Breakdown');
+  } else {
+    // Extract first sentence summary
+    const firstSentence = bodyText.split(/[.!?\n]/)[0].trim();
+    if (firstSentence.length > 5 && firstSentence.length < 60) {
+      suggestions.push(firstSentence);
+    }
+    suggestions.push('Follow-up: Discussion & Next Steps');
+    suggestions.push('Important Dispatch from Chase Studios');
+  }
+
+  return suggestions.slice(0, 3);
+}
+
 /**
  * Automatically tag emails with smart categorization
  */
