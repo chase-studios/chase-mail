@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Account, Contact, MailAttachment } from '../lib/types';
 import { getTier, plannedAddress } from '../lib/tiers';
+import { polishDraftText } from '../lib/aiAssistant';
 
 interface ComposeModalProps {
   db: SupabaseClient | null;
@@ -12,9 +13,11 @@ interface ComposeModalProps {
   initialTo?: string;
   initialSubject?: string;
   initialBody?: string;
+  initialAttachments?: MailAttachment[];
   onClose: () => void;
   onSent: (msg: string, sentDetails?: { id: string; to: string; subject: string; body: string }) => void;
   onDraftSaved: () => void;
+  onScheduleSend?: (details: { to: string; subject: string; body: string; scheduledFor: string }) => void;
 }
 
 export const ComposeModal: React.FC<ComposeModalProps> = ({
@@ -26,9 +29,11 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
   initialTo = '',
   initialSubject = '',
   initialBody = '',
+  initialAttachments = [],
   onClose,
   onSent,
-  onDraftSaved
+  onDraftSaved,
+  onScheduleSend
 }) => {
   const [to, setTo] = useState(initialTo);
   const [showCc, setShowCc] = useState(false);
@@ -39,16 +44,72 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
   const [body, setBody] = useState(initialBody);
   const [isHtml, setIsHtml] = useState(false);
   const [activeComposerTab, setActiveComposerTab] = useState<'write' | 'preview'>('write');
-  const [attachments, setAttachments] = useState<MailAttachment[]>([]);
+  const [attachments, setAttachments] = useState<MailAttachment[]>(initialAttachments);
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [autoSaveStatus, setAutoSaveStatus] = useState<string>('');
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(draftId);
 
+  // Voice Memo Recording State
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  // Schedule Send State
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduledDateTime, setScheduledDateTime] = useState('');
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tier = getTier(account.edition);
   const maxBytes = tier.maxAttachmentSizeMB * 1024 * 1024;
+
+  const handleToggleVoiceRecord = async () => {
+    if (isRecording) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecording(false);
+    } else {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setErrorMsg('Voice recording not supported in this browser.');
+          return;
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = e => {
+          if (e.data.size > 0) audioChunksRef.current.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            const newAtt: MailAttachment = {
+              id: 'voice-' + Date.now(),
+              name: `voice-memo-${new Date().toLocaleTimeString().replace(/:/g, '-')}.webm`,
+              size: audioBlob.size,
+              type: 'audio/webm',
+              dataUrl
+            };
+            setAttachments(prev => [...prev, newAtt]);
+          };
+          reader.readAsDataURL(audioBlob);
+          stream.getTracks().forEach(t => t.stop());
+        };
+
+        mediaRecorder.start();
+        setIsRecording(true);
+      } catch {
+        setErrorMsg('Microphone access denied or unavailable.');
+      }
+    }
+  };
 
   const insertFormatting = (prefix: string, suffix: string = prefix, placeholder: string = 'text') => {
     const el = textareaRef.current;
@@ -512,6 +573,24 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
             </button>
 
             <select
+              className="sig-preset-select ai-polish-select"
+              title="Enhance & polish draft with Chase Intelligence AI"
+              onChange={e => {
+                if (e.target.value) {
+                  setBody(prev => polishDraftText(prev, e.target.value as any));
+                  e.target.value = '';
+                }
+              }}
+              defaultValue=""
+            >
+              <option value="" disabled>✦ AI Polish...</option>
+              <option value="executive">✦ Executive Upgrade</option>
+              <option value="shorten">✦ Shorten to Bullets</option>
+              <option value="proofread">✦ Proofread & Fix</option>
+              <option value="urgent">✦ Urgent Alert</option>
+            </select>
+
+            <select
               className="sig-preset-select"
               title="Insert signature preset"
               onChange={e => {
@@ -529,6 +608,15 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
               <option value="vanguard">🛡 Vanguard Verified</option>
               <option value="clean">Clean Minimal</option>
             </select>
+
+            <button
+              type="button"
+              className={`toolbar-btn ${isRecording ? 'recording-active' : ''}`}
+              onClick={handleToggleVoiceRecord}
+              title={isRecording ? 'Stop Recording' : 'Record voice note attachment'}
+            >
+              🎙️ {isRecording ? 'Recording...' : 'Voice Note'}
+            </button>
 
             <button
               type="button"
@@ -610,6 +698,14 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
             <button
               type="button"
               disabled={busy}
+              onClick={() => setShowScheduleModal(true)}
+              title="Schedule email for later dispatch"
+            >
+              ⏰ Schedule
+            </button>
+            <button
+              type="button"
+              disabled={busy}
               onClick={handleManualSaveDraft}
             >
               Save Draft
@@ -632,6 +728,51 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
           </div>
         </div>
       </div>
+
+      {showScheduleModal && (
+        <div className="modal-overlay" onClick={() => setShowScheduleModal(false)}>
+          <div className="snooze-modal" onClick={e => e.stopPropagation()}>
+            <div className="snooze-modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '1.2rem' }}>⏰</span>
+                <h3 style={{ margin: 0, color: '#fff' }}>Schedule Send</h3>
+              </div>
+              <button className="link" onClick={() => setShowScheduleModal(false)} style={{ color: '#aaa' }}>
+                ✕
+              </button>
+            </div>
+            <p style={{ fontSize: '0.85rem', color: '#b9a8cf', margin: '8px 0 14px 0' }}>
+              Select the exact date and time to dispatch this message to <strong>{to || 'recipient'}</strong>:
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <input
+                type="datetime-local"
+                className="snooze-datetime-input"
+                value={scheduledDateTime}
+                onChange={e => setScheduledDateTime(e.target.value)}
+              />
+              <button
+                type="button"
+                className="primary-btn"
+                disabled={!scheduledDateTime}
+                onClick={() => {
+                  if (onScheduleSend && scheduledDateTime) {
+                    onScheduleSend({
+                      to,
+                      subject: subject || '(No subject)',
+                      body,
+                      scheduledFor: new Date(scheduledDateTime).toISOString()
+                    });
+                    onClose();
+                  }
+                }}
+              >
+                Confirm Scheduled Send ⏰
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -8,7 +8,13 @@ import { MessageDetail } from './components/MessageDetail';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AccountSettings } from './components/AccountSettings';
 import { GmailIntegration } from './components/GmailIntegration';
-import { Account, Mail, Draft, Contact, ExternalMail, AccountTier } from './lib/types';
+import { CommandPalette } from './components/CommandPalette';
+import { ShortcutsModal } from './components/ShortcutsModal';
+import { SnoozeModal } from './components/SnoozeModal';
+import { DriveVault } from './components/DriveVault';
+import { LockShieldModal } from './components/LockShieldModal';
+import { playMailSound } from './lib/soundFx';
+import { Account, Mail, Draft, Contact, ExternalMail, AccountTier, MailLabel, ScheduledMessage } from './lib/types';
 import { plannedAddress, getTier, TIERS } from './lib/tiers';
 import { validateRegistrationCode } from './lib/accessCodes';
 import {
@@ -35,6 +41,8 @@ export type FolderType =
   | 'starred'
   | 'sent'
   | 'drafts'
+  | 'snoozed'
+  | 'drive'
   | 'archive'
   | 'spam'
   | 'trash'
@@ -195,6 +203,55 @@ function App() {
   } | null>(null);
   const undoTimerRef = useRef<any>(null);
 
+  // Command Palette & Keyboard Shortcuts
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const [snoozeTargetMail, setSnoozeTargetMail] = useState<Mail | null>(null);
+
+  // Security Privacy PIN Shield
+  const [isLocked, setIsLocked] = useState(false);
+
+  // Snoozed Mails Map (mailId -> ISO string until resurface)
+  const [snoozedMap, setSnoozedMap] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem('chase-mail-snoozed-map');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Scheduled Send Queue
+  const [scheduledQueue, setScheduledQueue] = useState<ScheduledMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('chase-mail-scheduled-queue');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Custom Labels Map (mailId -> labelNames[])
+  const [labelsMap, setLabelsMap] = useState<Record<string, string[]>>(() => {
+    try {
+      const saved = localStorage.getItem('chase-mail-labels-map');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const availableLabels: MailLabel[] = [
+    { id: 'lbl-prod', name: 'Production', color: '#8648eb' },
+    { id: 'lbl-game', name: 'Gaming', color: '#22d3ee' },
+    { id: 'lbl-vip', name: 'VIP', color: '#d4af37' },
+    { id: 'lbl-urgent', name: 'Urgent', color: '#f43f5e' },
+    { id: 'lbl-finance', name: 'Finance', color: '#10b981' }
+  ];
+
+  // Compose attachments initial
+  const [composeInitialAttachments, setComposeInitialAttachments] = useState<any[]>([]);
+
   // Notification Permission Request Banner State
   const [showPermissionBanner, setShowPermissionBanner] = useState(() => {
     return (
@@ -285,6 +342,62 @@ function App() {
       localStorage.setItem('chase-mail-spam-ids', JSON.stringify(Array.from(spamIds)));
     } catch {}
   }, [spamIds]);
+
+  // Persist Snooze Map
+  useEffect(() => {
+    try {
+      localStorage.setItem('chase-mail-snoozed-map', JSON.stringify(snoozedMap));
+    } catch {}
+  }, [snoozedMap]);
+
+  // Persist Scheduled Send Queue
+  useEffect(() => {
+    try {
+      localStorage.setItem('chase-mail-scheduled-queue', JSON.stringify(scheduledQueue));
+    } catch {}
+  }, [scheduledQueue]);
+
+  // Persist Custom Labels Map
+  useEffect(() => {
+    try {
+      localStorage.setItem('chase-mail-labels-map', JSON.stringify(labelsMap));
+    } catch {}
+  }, [labelsMap]);
+
+  // Periodic timer for Snoozed resurrection and Scheduled Send dispatch
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+
+      // 1. Check snoozed items
+      let snoozedChanged = false;
+      const nextSnoozed = { ...snoozedMap };
+      for (const [mId, untilIso] of Object.entries(nextSnoozed)) {
+        if (new Date(untilIso).getTime() <= now) {
+          delete nextSnoozed[mId];
+          snoozedChanged = true;
+          playMailSound('receive');
+          setNotice('A snoozed email has returned to your Inbox.');
+        }
+      }
+      if (snoozedChanged) {
+        setSnoozedMap(nextSnoozed);
+      }
+
+      // 2. Check scheduled send dispatches
+      if (scheduledQueue.length > 0 && db && session) {
+        const dueMessages = scheduledQueue.filter(sm => new Date(sm.scheduledFor).getTime() <= now);
+        if (dueMessages.length > 0) {
+          for (const msg of dueMessages) {
+            void executeScheduledSend(msg);
+          }
+          setScheduledQueue(prev => prev.filter(sm => new Date(sm.scheduledFor).getTime() > now));
+        }
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [snoozedMap, scheduledQueue, db, session]);
 
   // Supabase Auth Listener
   useEffect(() => {
@@ -600,6 +713,25 @@ function App() {
         }
         await refresh(session.user.id);
       }
+    }
+  }
+
+  function openMailFromAnywhere(m: Mail) {
+    const existingThread = visibleThreads.find(t => t.messages.some(x => x.id === m.id));
+    if (existingThread) {
+      void openThread(existingThread);
+    } else {
+      void openThread({
+        threadKey: m.id,
+        subject: m.subject || '(No subject)',
+        normalizedSubject: normalizeSubject(m.subject || ''),
+        messages: [m],
+        latestMessage: m,
+        unread: false,
+        starred: starredIds.has(m.id),
+        count: 1,
+        participantIds: [m.sender_id, m.recipient_id]
+      });
     }
   }
 
@@ -956,6 +1088,123 @@ function App() {
     }
   }
 
+  // Global Superhuman Keyboard Navigation Engine
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Toggle Command Palette on Ctrl+K or Cmd+K
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(prev => !prev);
+        return;
+      }
+
+      // Ignore if user is typing in an input, modal, or screen lock
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable ||
+        composeOpen ||
+        isLocked
+      ) {
+        return;
+      }
+
+      if (e.key === '?') {
+        e.preventDefault();
+        setShortcutsModalOpen(prev => !prev);
+      } else if (e.key === 'c') {
+        e.preventDefault();
+        handleOpenNewCompose();
+      } else if (e.key === '/') {
+        e.preventDefault();
+        const searchInput = document.querySelector('.search-and-select-bar input[type="search"]') as HTMLInputElement;
+        if (searchInput) searchInput.focus();
+      } else if (e.key === 'Escape') {
+        if (opened) setOpened(null);
+        if (shortcutsModalOpen) setShortcutsModalOpen(false);
+        if (commandPaletteOpen) setCommandPaletteOpen(false);
+        if (snoozeTargetMail) setSnoozeTargetMail(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [composeOpen, isLocked, opened, shortcutsModalOpen, commandPaletteOpen, snoozeTargetMail]);
+
+  // Snooze Actions
+  function handleSnoozeMail(mail: Mail, untilIso: string) {
+    setSnoozedMap(prev => ({
+      ...prev,
+      [mail.id]: untilIso
+    }));
+    playMailSound('snooze');
+    setNotice(`Conversation snoozed until ${new Date(untilIso).toLocaleString()}.`);
+    setOpened(null);
+    setSnoozeTargetMail(null);
+  }
+
+  function handleUnsnooze(mailId: string) {
+    setSnoozedMap(prev => {
+      const next = { ...prev };
+      delete next[mailId];
+      return next;
+    });
+    setNotice('Message returned to Inbox.');
+  }
+
+  // Label Actions
+  function handleToggleLabel(mailId: string, labelName: string) {
+    setLabelsMap(prev => {
+      const current = prev[mailId] || [];
+      const nextLabels = current.includes(labelName)
+        ? current.filter(l => l !== labelName)
+        : [...current, labelName];
+      return {
+        ...prev,
+        [mailId]: nextLabels
+      };
+    });
+  }
+
+  // Scheduled Send Action
+  function handleScheduleSend(details: { to: string; subject: string; body: string; scheduledFor: string }) {
+    const newScheduled: ScheduledMessage = {
+      id: 'sched-' + Date.now(),
+      to: details.to,
+      subject: details.subject,
+      body: details.body,
+      scheduledFor: details.scheduledFor,
+      createdAt: new Date().toISOString()
+    };
+    setScheduledQueue(prev => [...prev, newScheduled]);
+    setNotice(`Message scheduled to send at ${new Date(details.scheduledFor).toLocaleString()}.`);
+  }
+
+  async function executeScheduledSend(item: ScheduledMessage) {
+    if (!db || !session) return;
+    try {
+      const cleanHandle = item.to.split('@')[0].toLowerCase();
+      const internalAcc = accounts.find(
+        a =>
+          a.handle.toLowerCase() === item.to.toLowerCase() ||
+          a.handle.toLowerCase() === cleanHandle
+      );
+      if (internalAcc) {
+        await db.from('mail_messages').insert({
+          sender_id: session.user.id,
+          recipient_id: internalAcc.user_id,
+          subject: item.subject,
+          body: item.body,
+          sent_at: new Date().toISOString()
+        });
+        playMailSound('send');
+        setNotice(`Scheduled message to ${item.to} was dispatched successfully!`);
+        await refresh(session.user.id);
+      }
+    } catch {}
+  }
+
   // Empty Trash
   function handleEmptyTrash() {
     setDeletedIds(prev => new Set([...prev, ...trashIds]));
@@ -963,7 +1212,7 @@ function App() {
     setNotice('Trash emptied.');
   }
 
-  // Message Filtering Logic Across Folders (Unified Inbox)
+  // Message Filtering Logic Across Folders (Unified Inbox + Snooze + Labels)
   const visible = allMails.filter(m => {
     // Exclude permanently deleted messages
     if (deletedIds.has(m.id)) return false;
@@ -973,9 +1222,15 @@ function App() {
       if (m.recipient_deleted_at) return false;
       if (trashIds.has(m.id) || archivedIds.has(m.id) || spamIds.has(m.id)) return false;
 
+      // Hide snoozed messages while timer is active
+      if (snoozedMap[m.id] && new Date(snoozedMap[m.id]).getTime() > Date.now()) return false;
+
       // In-App Unified Inbox Source Filter
       if (inboxSourceFilter === 'network' && m.is_external) return false;
       if (inboxSourceFilter === 'external' && !m.is_external) return false;
+    } else if (folder === 'snoozed') {
+      if (!snoozedMap[m.id] || new Date(snoozedMap[m.id]).getTime() <= Date.now()) return false;
+      if (trashIds.has(m.id) || deletedIds.has(m.id)) return false;
     } else if (folder === 'starred') {
       if (!starredIds.has(m.id)) return false;
       if (trashIds.has(m.id)) return false;
@@ -1001,11 +1256,21 @@ function App() {
     );
     const searchString = search.trim().toLowerCase();
 
+    // Custom label search e.g. #production or #gaming
+    if (searchString.startsWith('#')) {
+      const targetLabel = searchString.slice(1);
+      const mLabels = labelsMap[m.id] || [];
+      return mLabels.some(l => l.toLowerCase() === targetLabel);
+    }
+
+    const mailLabels = (labelsMap[m.id] || []).join(' ');
+
     return [
       m.subject,
       m.body,
       m.external_from || '',
       m.external_to || '',
+      mailLabels,
       targetAccount?.handle || '',
       targetAccount?.display_name || ''
     ].some(v => v.toLowerCase().includes(searchString));
@@ -1043,38 +1308,73 @@ function App() {
         </div>
         <span className="tag">EVERY GENRE. NO LIMITS.</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {session && (
+            <button
+              type="button"
+              className="command-palette-trigger"
+              onClick={() => setCommandPaletteOpen(true)}
+              title="Open Command Palette (Ctrl+K / Cmd+K)"
+            >
+              <span>🔍 Search & Commands</span>
+              <kbd>Ctrl K</kbd>
+            </button>
+          )}
+
           <label className="theme-picker">
             Theme{' '}
             <select
               aria-label="Color theme"
               value={theme}
-              onChange={e => setTheme(e.target.value as typeof theme)}
+              onChange={e => setTheme(e.target.value as any)}
             >
-              <option value="purple">Purple</option>
-              <option value="midnight">Midnight</option>
-              <option value="light">Light</option>
+              <option value="purple">🌌 Obsidian Royale</option>
+              <option value="royal-gold">👑 Royal Gold Sovereign</option>
+              <option value="cyber-vanguard">🛡 Cyber Vanguard</option>
+              <option value="oled">🖤 OLED Pure Pitch</option>
+              <option value="light">☀️ Studio Horizon</option>
             </select>
           </label>
+
           {session && (
-            <button
-              type="button"
-              className="mini-btn"
-              style={{
-                background: 'rgba(239, 68, 68, 0.15)',
-                border: '1px solid rgba(239, 68, 68, 0.35)',
-                color: '#fca5a5',
-                padding: '4px 10px',
-                borderRadius: '6px',
-                fontSize: '0.8rem',
-                cursor: 'pointer'
-              }}
-              onClick={() => {
-                if (db) void db.auth.signOut();
-              }}
-              title="Sign out of current account"
-            >
-              Sign Out
-            </button>
+            <>
+              <button
+                type="button"
+                className="header-icon-btn"
+                onClick={() => setShortcutsModalOpen(true)}
+                title="Superhuman Keyboard Shortcuts (?)"
+              >
+                ⌨
+              </button>
+
+              <button
+                type="button"
+                className="header-icon-btn"
+                onClick={() => setIsLocked(true)}
+                title="Lock Privacy Shield"
+              >
+                🔒
+              </button>
+
+              <button
+                type="button"
+                className="mini-btn"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  color: '#fca5a5',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer'
+                }}
+                onClick={() => {
+                  if (db) void db.auth.signOut();
+                }}
+                title="Sign out of current account"
+              >
+                Sign Out
+              </button>
+            </>
           )}
         </div>
       </header>
@@ -1474,6 +1774,17 @@ function App() {
             </button>
 
             <button
+              className={'side ' + (folder === 'snoozed' && !opened ? 'active' : '')}
+              onClick={() => {
+                setFolder('snoozed');
+                setOpened(null);
+                setExternalOpened(null);
+              }}
+            >
+              ⏰ Snoozed {Object.keys(snoozedMap).length > 0 && `(${Object.keys(snoozedMap).length})`}
+            </button>
+
+            <button
               className={'side ' + (folder === 'sent' && !opened ? 'active' : '')}
               onClick={() => {
                 setFolder('sent');
@@ -1493,6 +1804,17 @@ function App() {
               }}
             >
               ✎ Drafts ({drafts.length})
+            </button>
+
+            <button
+              className={'side ' + (folder === 'drive' && !opened ? 'active' : '')}
+              onClick={() => {
+                setFolder('drive');
+                setOpened(null);
+                setExternalOpened(null);
+              }}
+            >
+              📁 Chase Drive (Files)
             </button>
 
             <button
@@ -1745,6 +2067,20 @@ function App() {
                   </div>
                 )}
               </>
+            ) : /* Folder: Chase Drive & Attachment Vault */
+            folder === 'drive' ? (
+              <DriveVault
+                mails={allMails}
+                accounts={accounts}
+                onOpenMail={openMailFromAnywhere}
+                onComposeWithAttachment={att => {
+                  setComposeInitialAttachments([att]);
+                  setComposeInitialTo('');
+                  setComposeInitialSubject('');
+                  setComposeInitialBody('');
+                  setComposeOpen(true);
+                }}
+              />
             ) : /* Message Detail View */
             opened ? (
               <MessageDetail
@@ -1756,6 +2092,8 @@ function App() {
                 isStarred={starredIds.has(opened.id)}
                 isArchived={archivedIds.has(opened.id)}
                 isSpam={spamIds.has(opened.id)}
+                mailLabels={labelsMap[opened.id] || []}
+                availableLabels={availableLabels}
                 onBack={() => {
                   setOpened(null);
                   setOpenedThreadMails([]);
@@ -1767,9 +2105,11 @@ function App() {
                 onToggleStar={handleToggleStar}
                 onToggleArchive={handleToggleArchive}
                 onToggleSpam={handleToggleSpam}
+                onSnooze={m => setSnoozeTargetMail(m)}
+                onToggleLabel={handleToggleLabel}
                 onQuickSend={handleQuickSend}
               />
-            ) : /* Standard Mail Folders (Inbox, Starred, Sent, Drafts, Archive, Spam, Trash) */
+            ) : /* Standard Mail Folders (Inbox, Starred, Snoozed, Sent, Drafts, Archive, Spam, Trash) */
             (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1778,6 +2118,8 @@ function App() {
                       ? 'Inbox ✦'
                       : folder === 'starred'
                       ? 'Starred ⭐'
+                      : folder === 'snoozed'
+                      ? 'Snoozed ⏰'
                       : folder === 'drafts'
                       ? 'Drafts ✎'
                       : folder === 'sent'
@@ -2086,7 +2428,11 @@ function App() {
           initialTo={composeInitialTo}
           initialSubject={composeInitialSubject}
           initialBody={composeInitialBody}
-          onClose={() => setComposeOpen(false)}
+          initialAttachments={composeInitialAttachments}
+          onClose={() => {
+            setComposeOpen(false);
+            setComposeInitialAttachments([]);
+          }}
           onSent={(msg, sentDetails) => {
             setNotice(msg);
             if (sentDetails) {
@@ -2095,6 +2441,7 @@ function App() {
             void refresh(session.user.id);
           }}
           onDraftSaved={() => void refresh(session.user.id)}
+          onScheduleSend={handleScheduleSend}
         />
       )}
 
@@ -2124,6 +2471,46 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Superhuman Command Palette (Ctrl+K / Cmd+K) */}
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onSelectFolder={f => setFolder(f)}
+        onOpenCompose={handleOpenNewCompose}
+        onOpenShortcuts={() => setShortcutsModalOpen(true)}
+        onOpenLockShield={() => setIsLocked(true)}
+        onChangeTheme={t => setTheme(t as any)}
+        mails={allMails}
+        accounts={accounts}
+        onOpenMail={openMailFromAnywhere}
+      />
+
+      {/* Keyboard Shortcuts Cheat Sheet (?) */}
+      <ShortcutsModal
+        isOpen={shortcutsModalOpen}
+        onClose={() => setShortcutsModalOpen(false)}
+      />
+
+      {/* Snooze Email Dialog */}
+      <SnoozeModal
+        isOpen={Boolean(snoozeTargetMail)}
+        onClose={() => setSnoozeTargetMail(null)}
+        onSnooze={untilIso => {
+          if (snoozeTargetMail) handleSnoozeMail(snoozeTargetMail, untilIso);
+        }}
+        mailSubject={snoozeTargetMail?.subject}
+      />
+
+      {/* Studio Privacy PIN Shield Lock */}
+      <LockShieldModal
+        isLocked={isLocked}
+        onUnlock={() => setIsLocked(false)}
+        onSignOut={() => {
+          setIsLocked(false);
+          if (db) void db.auth.signOut();
+        }}
+      />
 
       {notice && (
         <div className="notice" role="status">

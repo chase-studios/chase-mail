@@ -51,7 +51,33 @@ export type Mail = {
   is_external?: boolean;
   external_from?: string;
   external_to?: string;
+  labels?: string[];
+  snoozed_until?: string | null;
 };
+
+export type MailLabel = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+export type SnoozeRecord = {
+  mailId: string;
+  snoozedUntil: string;
+  note?: string;
+};
+
+export type ScheduledMessage = {
+  id: string;
+  to: string;
+  subject: string;
+  body: string;
+  scheduledFor: string;
+  createdAt: string;
+};
+
+export type SoundProfile = 'executive' | 'cyber' | 'minimal' | 'mute';
+export type AppTheme = 'dark' | 'royal-gold' | 'cyber-vanguard' | 'oled' | 'horizon';
 
 export type Draft = {
   id: string;

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { Mail, Account, MailAttachment } from '../lib/types';
+import React, { useState, useMemo } from 'react';
+import { Mail, Account, MailAttachment, MailLabel } from '../lib/types';
 import { plannedAddress } from '../lib/tiers';
+import { generateThreadSummary, generateSmartReplies } from '../lib/aiAssistant';
 
 interface MessageDetailProps {
   mail: Mail;
@@ -11,6 +12,8 @@ interface MessageDetailProps {
   isStarred: boolean;
   isArchived: boolean;
   isSpam: boolean;
+  mailLabels?: string[];
+  availableLabels?: MailLabel[];
   onBack: () => void;
   onReply: (mail: Mail) => void;
   onReplyAll: (mail: Mail) => void;
@@ -19,6 +22,8 @@ interface MessageDetailProps {
   onToggleStar: (mailId: string) => void;
   onToggleArchive: (mailId: string) => void;
   onToggleSpam: (mailId: string) => void;
+  onSnooze?: (mail: Mail) => void;
+  onToggleLabel?: (mailId: string, labelName: string) => void;
   onQuickSend?: (toUserId: string, subject: string, body: string) => Promise<boolean>;
 }
 
@@ -31,6 +36,8 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
   isStarred,
   isArchived,
   isSpam,
+  mailLabels = [],
+  availableLabels = [],
   onBack,
   onReply,
   onReplyAll,
@@ -39,14 +46,30 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
   onToggleStar,
   onToggleArchive,
   onToggleSpam,
+  onSnooze,
+  onToggleLabel,
   onQuickSend
 }) => {
   const [previewAttachment, setPreviewAttachment] = useState<MailAttachment | null>(null);
+  const [showAiSummary, setShowAiSummary] = useState(false);
+  const [showLabelPicker, setShowLabelPicker] = useState(false);
 
   // In stacked thread mode, threadMails contains all messages chronologically (oldest to newest)
   const displayMails = threadMails && threadMails.length > 0 ? threadMails : [mail];
   const isThread = displayMails.length > 1;
   const latestMail = displayMails[displayMails.length - 1];
+
+  // AI Summary for this thread
+  const aiSummary = useMemo(() => {
+    return generateThreadSummary(displayMails, currentUserId);
+  }, [displayMails, currentUserId]);
+
+  // AI Smart Replies
+  const smartReplies = useMemo(() => {
+    const sender = accounts.find(a => a.user_id === latestMail.sender_id);
+    const name = sender ? sender.display_name || sender.handle : latestMail.external_from || 'there';
+    return generateSmartReplies(displayMails, name);
+  }, [displayMails, latestMail, accounts]);
 
   // Expanded message IDs in the conversation stack (the newest message is expanded by default)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
@@ -57,7 +80,6 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
     setExpandedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) {
-        // Keep at least one message open
         if (next.size > 1) next.delete(id);
       } else {
         next.add(id);
@@ -167,6 +189,50 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
         </button>
 
         <div className="toolbar-actions">
+          {onSnooze && (
+            <button
+              className="icon-action-btn"
+              onClick={() => onSnooze(latestMail)}
+              title="Snooze conversation"
+            >
+              ⏰ Snooze
+            </button>
+          )}
+
+          <div style={{ position: 'relative' }}>
+            <button
+              className="icon-action-btn"
+              onClick={() => setShowLabelPicker(!showLabelPicker)}
+              title="Manage Labels / Tags"
+            >
+              🏷 Label {mailLabels.length > 0 ? `(${mailLabels.length})` : ''} ▾
+            </button>
+            {showLabelPicker && (
+              <div className="label-picker-dropdown">
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a894c2', marginBottom: '6px' }}>
+                  TOGGLE LABELS:
+                </div>
+                {availableLabels.map(lbl => {
+                  const isActive = mailLabels.includes(lbl.name);
+                  return (
+                    <button
+                      key={lbl.id}
+                      type="button"
+                      className={`label-picker-item ${isActive ? 'active' : ''}`}
+                      onClick={() => {
+                        if (onToggleLabel) onToggleLabel(latestMail.id, lbl.name);
+                      }}
+                    >
+                      <span className="label-dot" style={{ background: lbl.color }} />
+                      <span>#{lbl.name}</span>
+                      {isActive && <span style={{ marginLeft: 'auto', fontSize: '0.8rem' }}>✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <button
             className={'icon-action-btn ' + (isStarred ? 'starred' : '')}
             onClick={() => onToggleStar(latestMail.id)}
@@ -212,8 +278,29 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
       {/* Thread Title Header */}
       <div className="detail-header-card">
         <div className="detail-title-row">
-          <h1>{latestMail.subject || '(No subject)'}</h1>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div>
+            <h1>{latestMail.subject || '(No subject)'}</h1>
+            {mailLabels.length > 0 && (
+              <div className="detail-label-chips" style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                {mailLabels.map(l => (
+                  <span key={l} className="label-chip-badge">
+                    #{l}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className={`ai-summary-toggle-btn ${showAiSummary ? 'active' : ''}`}
+              onClick={() => setShowAiSummary(!showAiSummary)}
+              title="Generate Instant AI Executive Briefing"
+            >
+              ✦ AI Summary {showAiSummary ? '▲' : '▼'}
+            </button>
+
             {isThread && (
               <span className="thread-stack-badge">
                 ✦ {displayMails.length} Messages in Thread
@@ -224,11 +311,48 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Collapsible AI Thread Summary Widget */}
+        {showAiSummary && (
+          <div className="ai-summary-box">
+            <div className="ai-summary-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="ai-sparkle-icon">✦</span>
+                <strong>Chase Intelligence Executive Briefing</strong>
+              </div>
+              <span className={`ai-sentiment-pill sentiment-${aiSummary.sentiment}`}>
+                Sentiment: {aiSummary.sentiment.toUpperCase()}
+              </span>
+            </div>
+
+            <p className="ai-summary-text">{aiSummary.summary}</p>
+
+            <div className="ai-summary-grid">
+              <div className="ai-summary-col">
+                <h5>Key Points</h5>
+                <ul>
+                  {aiSummary.keyPoints.map((pt, i) => (
+                    <li key={i}>{pt}</li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="ai-summary-col">
+                <h5>Action Items & Next Steps</h5>
+                <ul>
+                  {aiSummary.actionItems.map((act, i) => (
+                    <li key={i}>{act}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stacked Conversation Messages */}
       <div className="conversation-thread-stack">
-        {displayMails.map((m, idx) => {
+        {displayMails.map(m => {
           const isExpanded = expandedIds.has(m.id);
           const isMsgSender = m.sender_id === currentUserId;
           const msgSenderAcc = accounts.find(a => a.user_id === m.sender_id);
@@ -356,7 +480,7 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
         </div>
       )}
 
-      {/* Quick Reply Box */}
+      {/* Quick Reply Box with AI Smart Replies */}
       {onQuickSend && folder !== 'trash' && folder !== 'spam' && (
         <form onSubmit={handleQuickReplySubmit} className="quick-reply-box">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -372,11 +496,31 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
               Full Editor ✎
             </button>
           </div>
+
+          {/* AI Smart Replies Suggestions Bar */}
+          <div className="ai-smart-replies-bar">
+            <span style={{ fontSize: '0.75rem', color: '#a894c2', fontWeight: 600, alignSelf: 'center' }}>
+              ✦ AI DRAFTS:
+            </span>
+            {smartReplies.map(reply => (
+              <button
+                key={reply.id}
+                type="button"
+                className="ai-smart-reply-pill"
+                onClick={() => setQuickReplyText(reply.fullBody)}
+                title={reply.snippet}
+              >
+                <span>{reply.icon}</span>
+                <span>{reply.label}</span>
+              </button>
+            ))}
+          </div>
+
           <textarea
             rows={3}
             value={quickReplyText}
             onChange={e => setQuickReplyText(e.target.value)}
-            placeholder={`Write a quick reply to @${otherAcc?.handle || 'user'}...`}
+            placeholder={`Write a quick reply to @${otherAcc?.handle || 'user'} or tap an AI Draft above...`}
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' }}>
             <button
@@ -402,3 +546,4 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
     </div>
   );
 };
+
