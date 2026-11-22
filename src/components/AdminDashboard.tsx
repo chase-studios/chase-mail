@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { SupabaseClient } from '@supabase/supabase-js';
-import { Account, DeliveryEvent, AccountTier } from '../lib/types';
+import { Account, DeliveryEvent, AccountTier, AccountRole, RegistrationCode } from '../lib/types';
 import { TIERS, plannedAddress } from '../lib/tiers';
+import { getRegistrationCodes, saveRegistrationCodes, DEFAULT_REGISTRATION_CODES } from '../lib/accessCodes';
 
 interface AdminDashboardProps {
   db: SupabaseClient | null;
@@ -21,7 +22,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [search, setSearch] = useState('');
   const [selectedTierFilter, setSelectedTierFilter] = useState<string>('all');
   const [deliveryEvents, setDeliveryEvents] = useState<DeliveryEvent[]>([]);
-  const [activeTab, setActiveTab] = useState<'users' | 'delivery' | 'system'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'codes' | 'delivery' | 'system'>('users');
   const [busy, setBusy] = useState(false);
   const [stats, setStats] = useState({
     totalAccounts: 0,
@@ -30,12 +31,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     suspendedAccounts: 0
   });
 
+  // Access Codes State
+  const [accessCodes, setAccessCodes] = useState<Record<AccountTier, RegistrationCode>>(() => getRegistrationCodes());
+
+  // Executive Account Provisioner State (For Don, Ally, Studio Owner)
+  const [execPreset, setExecPreset] = useState<'owner' | 'don' | 'ally' | 'custom'>('owner');
+  const [execHandle, setExecHandle] = useState('owner');
+  const [execDisplayName, setExecDisplayName] = useState('Studio Owner');
+  const [execTier, setExecTier] = useState<AccountTier>('studio');
+  const [execRole, setExecRole] = useState<AccountRole>('super_admin');
+  const [execGoldTrim, setExecGoldTrim] = useState(true);
+
   const isPrivileged =
+    Boolean(currentAccount.is_admin) ||
     currentAccount.edition.toLowerCase() === 'studio' ||
     currentAccount.edition.toLowerCase() === 'vanguard';
 
   const [unlocked, setUnlocked] = useState(isPrivileged);
   const [adminKeyInput, setAdminKeyInput] = useState('');
+
+  // Handle Preset changes for initial executive provisioning
+  const handlePresetSelect = (preset: 'owner' | 'don' | 'ally' | 'custom') => {
+    setExecPreset(preset);
+    if (preset === 'owner') {
+      setExecHandle('owner');
+      setExecDisplayName('Studio Owner / Super Admin');
+      setExecTier('studio');
+      setExecRole('super_admin');
+      setExecGoldTrim(true);
+    } else if (preset === 'don') {
+      setExecHandle('don');
+      setExecDisplayName('Don');
+      setExecTier('studio');
+      setExecRole('executive');
+      setExecGoldTrim(true);
+    } else if (preset === 'ally') {
+      setExecHandle('ally');
+      setExecDisplayName('Ally');
+      setExecTier('studio');
+      setExecRole('executive');
+      setExecGoldTrim(true);
+    }
+  };
 
   // Fetch delivery events & system statistics
   useEffect(() => {
@@ -44,7 +81,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const loadData = async () => {
       setBusy(true);
       try {
-        // Query delivery events
         const { data: eventsData } = await db
           .from('mail_delivery_events')
           .select('*')
@@ -54,7 +90,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         if (eventsData && eventsData.length > 0) {
           setDeliveryEvents(eventsData);
         } else {
-          // Provide representative queue telemetry if live table has not yet logged external events
           setDeliveryEvents([
             {
               id: 'evt_sys_01',
@@ -75,7 +110,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           ]);
         }
 
-        // Count messages
         const { count: msgCount } = await db
           .from('mail_messages')
           .select('*', { count: 'exact', head: true });
@@ -113,6 +147,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
+  const handleUpdateRole = async (userId: string, newRole: AccountRole) => {
+    if (!db) return;
+    setBusy(true);
+    const isAdmin = newRole === 'admin' || newRole === 'super_admin' || newRole === 'executive';
+    const { error } = await db
+      .from('mail_accounts')
+      .update({ admin_role: newRole, is_admin: isAdmin })
+      .eq('user_id', userId);
+
+    setBusy(false);
+    if (error) {
+      onSetNotice(`Role update error: ${error.message}`);
+    } else {
+      onSetNotice(`Updated user administrative role to ${newRole.toUpperCase()}`);
+      onRefreshAccounts();
+    }
+  };
+
   const handleToggleStatus = async (account: Account) => {
     if (!db) return;
     const newStatus = account.status === 'suspended' ? 'active' : 'suspended';
@@ -126,8 +178,69 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (error) {
       onSetNotice(`Status update error: ${error.message}`);
     } else {
-      onSetNotice(`Account ${account.handle} marked as ${newStatus}`);
+      onSetNotice(`Account @${account.handle} marked as ${newStatus}`);
       onRefreshAccounts();
+    }
+  };
+
+  const handleSaveAccessCode = (tier: AccountTier, newCode: string) => {
+    const updated = {
+      ...accessCodes,
+      [tier]: {
+        ...accessCodes[tier],
+        code: newCode.trim().toUpperCase()
+      }
+    };
+    setAccessCodes(updated);
+    saveRegistrationCodes(updated);
+    onSetNotice(`Access code for ${TIERS[tier].displayName} updated to: ${newCode.trim().toUpperCase()}`);
+  };
+
+  const handleToggleAccessCodeActive = (tier: AccountTier) => {
+    const updated = {
+      ...accessCodes,
+      [tier]: {
+        ...accessCodes[tier],
+        active: !accessCodes[tier].active
+      }
+    };
+    setAccessCodes(updated);
+    saveRegistrationCodes(updated);
+    onSetNotice(`Access code for ${tier} is now ${updated[tier].active ? 'ACTIVE' : 'PAUSED'}.`);
+  };
+
+  // Executive Account Provisioning Action
+  const handleProvisionExecutive = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db) return;
+    setBusy(true);
+
+    const existing = allAccounts.find(a => a.handle.toLowerCase() === execHandle.trim().toLowerCase());
+    if (existing) {
+      // Update existing account's tier & role
+      const { error } = await db
+        .from('mail_accounts')
+        .update({
+          display_name: execDisplayName.trim(),
+          edition: execTier,
+          admin_role: execRole,
+          is_admin: execRole !== 'user',
+          gold_trim: execGoldTrim
+        })
+        .eq('user_id', existing.user_id);
+
+      setBusy(false);
+      if (error) {
+        onSetNotice(`Provisioning update error: ${error.message}`);
+      } else {
+        onSetNotice(`Account @${existing.handle} successfully upgraded to ${TIERS[execTier].displayName} (${execRole.toUpperCase()})!`);
+        onRefreshAccounts();
+      }
+    } else {
+      setBusy(false);
+      onSetNotice(
+        `To provision a new account for @${execHandle}, have the user sign up with their private email and enter access code '${accessCodes[execTier].code}' during registration.`
+      );
     }
   };
 
@@ -155,6 +268,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           onSubmit={e => {
             e.preventDefault();
             if (
+              adminKeyInput.trim() === 'CHASE-STUDIOS-SUPERADMIN-2026' ||
               adminKeyInput.trim() === 'CHASE-STUDIOS-ADMIN-2026' ||
               adminKeyInput.trim().toLowerCase() === 'studio'
             ) {
@@ -186,7 +300,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div>
           <h1>👑 Chase Studios Admin Console</h1>
           <p className="hint">
-            Enterprise system management, user directory, tier provisioning, and mail telemetry.
+            Governance, separate account editions & administrative permissions, registration codes, and mail delivery queues.
           </p>
         </div>
         <div className="admin-top-stats">
@@ -213,7 +327,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           className={'admin-tab-btn ' + (activeTab === 'users' ? 'active' : '')}
           onClick={() => setActiveTab('users')}
         >
-          👥 User Directory & Tiers
+          👥 User Directory & Roles
+        </button>
+        <button
+          className={'admin-tab-btn ' + (activeTab === 'codes' ? 'active' : '')}
+          onClick={() => setActiveTab('codes')}
+        >
+          🔑 Access Codes & Executive Provisioning
         </button>
         <button
           className={'admin-tab-btn ' + (activeTab === 'delivery' ? 'active' : '')}
@@ -229,7 +349,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </button>
       </div>
 
-      {/* Tab 1: User Directory & Tiers */}
+      {/* Tab 1: User Directory & Permissions */}
       {activeTab === 'users' && (
         <div className="admin-tab-content">
           <div className="admin-filter-bar">
@@ -245,9 +365,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onChange={e => setSelectedTierFilter(e.target.value)}
               className="admin-select"
             >
-              <option value="all">All Tiers ({allAccounts.length})</option>
+              <option value="all">All Editions ({allAccounts.length})</option>
               <option value="community">Community</option>
               <option value="prime">Prime</option>
+              <option value="royal">Royal</option>
               <option value="vanguard">Vanguard</option>
               <option value="studio">Studio</option>
             </select>
@@ -259,7 +380,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <tr>
                   <th>User / Email</th>
                   <th>Display Name</th>
-                  <th>Account Tier</th>
+                  <th>Account Edition</th>
+                  <th>Admin Role (Separate)</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
@@ -267,6 +389,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <tbody>
                 {filteredAccounts.map(acc => {
                   const t = TIERS[(acc.edition.toLowerCase() as AccountTier) || 'community'] || TIERS.community;
+                  const currentRole: AccountRole = acc.admin_role || (acc.is_admin ? 'admin' : 'user');
                   return (
                     <tr key={acc.user_id}>
                       <td>
@@ -275,16 +398,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </td>
                       <td>{acc.display_name || '(None)'}</td>
                       <td>
-                        <span
-                          className="tier-badge"
+                        <select
+                          disabled={busy}
+                          value={acc.edition.toLowerCase()}
+                          onChange={e =>
+                            void handleUpdateTier(acc.user_id, e.target.value as AccountTier)
+                          }
+                          className="tier-select-mini"
+                        >
+                          <option value="community">Community</option>
+                          <option value="prime">Prime</option>
+                          <option value="royal">Royal</option>
+                          <option value="vanguard">Vanguard</option>
+                          <option value="studio">Studio</option>
+                        </select>
+                      </td>
+                      <td>
+                        <select
+                          disabled={busy}
+                          value={currentRole}
+                          onChange={e =>
+                            void handleUpdateRole(acc.user_id, e.target.value as AccountRole)
+                          }
+                          className="tier-select-mini"
                           style={{
-                            background: `${t.badgeColor}22`,
-                            border: `1px solid ${t.badgeColor}`,
-                            color: t.badgeColor
+                            borderColor: acc.is_admin ? '#d4af37' : '#5a3d74',
+                            color: acc.is_admin ? '#fef08a' : '#fff'
                           }}
                         >
-                          {t.displayName}
-                        </span>
+                          <option value="user">User (No Admin)</option>
+                          <option value="staff">Staff</option>
+                          <option value="executive">Executive</option>
+                          <option value="super_admin">Super Administrator</option>
+                        </select>
                       </td>
                       <td>
                         <span
@@ -297,31 +443,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </span>
                       </td>
                       <td>
-                        <div className="action-buttons-group">
-                          <select
-                            disabled={busy}
-                            value={acc.edition.toLowerCase()}
-                            onChange={e =>
-                              void handleUpdateTier(acc.user_id, e.target.value as AccountTier)
-                            }
-                            className="tier-select-mini"
-                          >
-                            <option value="community">Community</option>
-                            <option value="prime">Prime</option>
-                            <option value="vanguard">Vanguard</option>
-                            <option value="studio">Studio</option>
-                          </select>
-                          <button
-                            disabled={busy}
-                            className={
-                              'mini-btn ' +
-                              (acc.status === 'suspended' ? 'activate-btn' : 'suspend-btn')
-                            }
-                            onClick={() => void handleToggleStatus(acc)}
-                          >
-                            {acc.status === 'suspended' ? 'Restore' : 'Suspend'}
-                          </button>
-                        </div>
+                        <button
+                          disabled={busy}
+                          className={
+                            'mini-btn ' +
+                            (acc.status === 'suspended' ? 'activate-btn' : 'suspend-btn')
+                          }
+                          onClick={() => void handleToggleStatus(acc)}
+                        >
+                          {acc.status === 'suspended' ? 'Restore' : 'Suspend'}
+                        </button>
                       </td>
                     </tr>
                   );
@@ -332,7 +463,191 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* Tab 2: Delivery & Bounce Queue */}
+      {/* Tab 2: Access Codes & Initial Executive Accounts */}
+      {activeTab === 'codes' && (
+        <div className="admin-tab-content">
+          <div className="telemetry-card">
+            <h3>🔑 Registration Access Codes Governance</h3>
+            <p className="hint">
+              Registration access codes protect privileged account editions (Prime, Royal, Vanguard, Studio). Users must enter the valid code during registration to obtain that edition. Passwords remain completely private and separate from access codes.
+            </p>
+
+            <div className="admin-table-container" style={{ marginTop: '16px' }}>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Account Edition</th>
+                    <th>Current Access Code</th>
+                    <th>Associated Role</th>
+                    <th>Status</th>
+                    <th>Rotate / Update Code</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(['community', 'prime', 'royal', 'vanguard', 'studio'] as AccountTier[]).map(tierKey => {
+                    const codeObj = accessCodes[tierKey] || DEFAULT_REGISTRATION_CODES[tierKey];
+                    return (
+                      <tr key={tierKey}>
+                        <td>
+                          <strong>{TIERS[tierKey].displayName}</strong>
+                          <div className="table-sub">{plannedAddress('username', tierKey)}</div>
+                        </td>
+                        <td>
+                          <code style={{ fontSize: '13px', color: '#ffc83b' }}>{codeObj.code}</code>
+                        </td>
+                        <td>
+                          <span className="table-sub">{codeObj.role.toUpperCase()}</span>
+                        </td>
+                        <td>
+                          <span
+                            className={
+                              'status-tag ' + (codeObj.active ? 'active' : 'suspended')
+                            }
+                          >
+                            {codeObj.active ? 'ACTIVE' : 'PAUSED'}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <input
+                              type="text"
+                              defaultValue={codeObj.code}
+                              id={`code-input-${tierKey}`}
+                              style={{ width: '150px', padding: '6px 8px', fontSize: '12px' }}
+                            />
+                            <button
+                              className="mini-btn"
+                              onClick={() => {
+                                const input = document.getElementById(
+                                  `code-input-${tierKey}`
+                                ) as HTMLInputElement;
+                                if (input) handleSaveAccessCode(tierKey, input.value);
+                              }}
+                            >
+                              Save
+                            </button>
+                            <button
+                              className="mini-btn link"
+                              onClick={() => handleToggleAccessCodeActive(tierKey)}
+                            >
+                              {codeObj.active ? 'Pause' : 'Activate'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Initial Executive Accounts Provisioner */}
+          <div className="telemetry-card" style={{ marginTop: '20px' }}>
+            <h3>👑 Executive Accounts Provisioner</h3>
+            <p className="hint">
+              Provision or upgrade individual accounts for the Studio Owner, Don, and Ally with independent credentials, proper tiers, and assigned roles.
+            </p>
+
+            <div style={{ display: 'flex', gap: '8px', margin: '14px 0', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className={'mini-btn ' + (execPreset === 'owner' ? 'activate-btn' : '')}
+                onClick={() => handlePresetSelect('owner')}
+              >
+                Preset: Studio Owner / Super Admin
+              </button>
+              <button
+                type="button"
+                className={'mini-btn ' + (execPreset === 'don' ? 'activate-btn' : '')}
+                onClick={() => handlePresetSelect('don')}
+              >
+                Preset: Don (Executive)
+              </button>
+              <button
+                type="button"
+                className={'mini-btn ' + (execPreset === 'ally' ? 'activate-btn' : '')}
+                onClick={() => handlePresetSelect('ally')}
+              >
+                Preset: Ally (Executive)
+              </button>
+              <button
+                type="button"
+                className={'mini-btn ' + (execPreset === 'custom' ? 'activate-btn' : '')}
+                onClick={() => setExecPreset('custom')}
+              >
+                Custom Executive
+              </button>
+            </div>
+
+            <form onSubmit={handleProvisionExecutive} style={{ maxWidth: '600px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <label>
+                  Username Handle
+                  <input
+                    type="text"
+                    required
+                    value={execHandle}
+                    onChange={e => setExecHandle(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Display Name
+                  <input
+                    type="text"
+                    required
+                    value={execDisplayName}
+                    onChange={e => setExecDisplayName(e.target.value)}
+                  />
+                </label>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '10px' }}>
+                <label>
+                  Account Edition
+                  <select
+                    value={execTier}
+                    onChange={e => setExecTier(e.target.value as AccountTier)}
+                  >
+                    <option value="studio">Studio Edition (@chasestudios.org)</option>
+                    <option value="royal">Royal Edition (@chasemail.com)</option>
+                    <option value="vanguard">Vanguard Edition (@chasevanguard.com)</option>
+                    <option value="prime">Prime Edition (@chaseprime.com)</option>
+                  </select>
+                </label>
+                <label>
+                  Administrative Role (Separate)
+                  <select
+                    value={execRole}
+                    onChange={e => setExecRole(e.target.value as AccountRole)}
+                  >
+                    <option value="super_admin">Super Administrator</option>
+                    <option value="executive">Executive</option>
+                    <option value="staff">Staff</option>
+                    <option value="user">User (Standard)</option>
+                  </select>
+                </label>
+              </div>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '12px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  style={{ width: 'auto' }}
+                  checked={execGoldTrim}
+                  onChange={e => setExecGoldTrim(e.target.checked)}
+                />
+                Enable Gold Executive Trim on account
+              </label>
+
+              <button type="submit" disabled={busy} style={{ marginTop: '16px' }} className="primary-btn">
+                Provision / Authorize Executive Account
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 3: Delivery & Bounce Queue */}
       {activeTab === 'delivery' && (
         <div className="admin-tab-content">
           <h3>📬 Inbound / Outbound Delivery Queue</h3>
@@ -378,7 +693,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* Tab 3: System Telemetry & DNS */}
+      {/* Tab 4: System Telemetry & DNS */}
       {activeTab === 'system' && (
         <div className="admin-tab-content system-telemetry">
           <div className="telemetry-card">
@@ -397,7 +712,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <strong>Client App Framework:</strong> React 18 + Vite + TypeScript PWA
               </li>
               <li>
-                <strong>Active Domain:</strong> <code>chasemail.com</code> (Chase Studios Network)
+                <strong>Active Production Domains:</strong> <code>chasemail.com</code>, <code>mail.chase-studios.org</code>
               </li>
             </ul>
           </div>

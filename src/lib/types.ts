@@ -1,4 +1,6 @@
-export type AccountTier = 'community' | 'prime' | 'vanguard' | 'studio';
+export type AccountTier = 'community' | 'prime' | 'royal' | 'vanguard' | 'studio';
+
+export type AccountRole = 'user' | 'staff' | 'admin' | 'executive' | 'super_admin';
 
 export type Account = {
   user_id: string;
@@ -8,6 +10,18 @@ export type Account = {
   created_at?: string;
   status?: 'active' | 'suspended';
   avatar_url?: string;
+  is_admin?: boolean;
+  admin_role?: AccountRole;
+  gold_trim?: boolean;
+};
+
+export type RegistrationCode = {
+  code: string;
+  tier: AccountTier;
+  role: AccountRole;
+  label: string;
+  active: boolean;
+  created_at: string;
 };
 
 export type MailAttachment = {
@@ -87,4 +101,6 @@ export type TierDefinition = {
   mailboxStorageGB: number;
   features: string[];
   badgeColor: string;
+  isProtected?: boolean;
+  description?: string;
 };

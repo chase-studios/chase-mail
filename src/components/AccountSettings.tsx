@@ -42,9 +42,29 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [totpSecret] = useState('JBSWY3DPEHPK3PXP');
 
-  // Account deletion modal state
+  // Gold Trim State
+  const [goldTrim, setGoldTrim] = useState(() => {
+    return localStorage.getItem('chase-mail-gold-trim') === 'true' || Boolean(account.gold_trim) || account.edition.toLowerCase() === 'royal';
+  });
+
+  // Account Deletion Modal State
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmationInput, setDeleteConfirmationInput] = useState('');
+
+  const handleToggleGoldTrim = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.checked;
+    setGoldTrim(val);
+    localStorage.setItem('chase-mail-gold-trim', String(val));
+    if (val) {
+      document.body.classList.add('gold-trim');
+    } else {
+      document.body.classList.remove('gold-trim');
+    }
+    if (db) {
+      await db.from('mail_accounts').update({ gold_trim: val }).eq('user_id', account.user_id);
+    }
+    onSetNotice(val ? 'Executive Gold Trim enabled.' : 'Executive Gold Trim disabled.');
+  };
 
   const tier = getTier(account.edition);
 
@@ -253,7 +273,7 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
         <div className="settings-section">
           {/* Identity & Display Name Card */}
           <div className="settings-card">
-            <h3>✦ Account Identity</h3>
+            <h3>✦ Account Identity & Privileges</h3>
             <div className="identity-overview">
               <p>
                 <strong>Username:</strong> @{account.handle}
@@ -262,8 +282,14 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
                 <strong>Email Address:</strong> {plannedAddress(account.handle, account.edition)}
               </p>
               <p>
-                <strong>Account Tier:</strong>{' '}
-                <span className="tier-tag">{tier.displayName}</span>
+                <strong>Account Edition:</strong>{' '}
+                <span className={'edition-badge ' + account.edition.toLowerCase()}>{tier.displayName}</span>
+              </p>
+              <p>
+                <strong>Administrative Role:</strong>{' '}
+                <span style={{ color: account.is_admin ? '#fef08a' : '#c5b5d8', fontWeight: 700 }}>
+                  {(account.admin_role || (account.is_admin ? 'Administrator' : 'Standard User')).toUpperCase()}
+                </span>
               </p>
               <p>
                 <strong>Storage Quota:</strong> {tier.mailboxStorageGB} GB Allocation (
@@ -286,6 +312,23 @@ export const AccountSettings: React.FC<AccountSettingsProps> = ({
                 Save Display Name
               </button>
             </form>
+          </div>
+
+          {/* Gold Executive Trim Card */}
+          <div className="settings-card">
+            <h3>✦ Gold Executive Trim</h3>
+            <p className="hint">
+              Enable an elegant luxury gold-trimmed interface border, refined profile card accents, and premium badge styling while preserving your chosen color theme.
+            </p>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginTop: '12px' }}>
+              <input
+                type="checkbox"
+                style={{ width: 'auto' }}
+                checked={goldTrim}
+                onChange={handleToggleGoldTrim}
+              />
+              <span style={{ fontWeight: 600, color: '#fef08a' }}>Active Executive Gold Trim</span>
+            </label>
           </div>
 
           {/* Password Change Card */}

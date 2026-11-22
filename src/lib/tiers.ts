@@ -5,6 +5,7 @@ export const TIERS: Record<AccountTier, TierDefinition> = {
     id: 'community',
     displayName: 'Community Edition',
     domain: 'chasemail.com',
+    description: 'Standard public email access for the Chase Studios universe.',
     maxAttachmentSizeMB: 10,
     mailboxStorageGB: 5,
     features: [
@@ -13,49 +14,76 @@ export const TIERS: Record<AccountTier, TierDefinition> = {
       'Pocket Companion nursery',
       'Basic themes & personalization'
     ],
-    badgeColor: '#8648eb'
+    badgeColor: '#8648eb',
+    isProtected: false
   },
   prime: {
     id: 'prime',
     displayName: 'Prime Edition',
     domain: 'chaseprime.com',
+    description: 'Enhanced edition with dual address alias and extended mailbox capacity.',
     maxAttachmentSizeMB: 25,
     mailboxStorageGB: 25,
     features: [
       'Native @chaseprime.com & @chasemail.com alias',
       'Priority mail processing',
       'Custom signatures & rich formatting',
-      'Extended companion care & evolution'
+      'Extended companion care & evolution',
+      'Optional gold accent customization'
     ],
-    badgeColor: '#ffaa00'
+    badgeColor: '#eab308',
+    isProtected: true
+  },
+  royal: {
+    id: 'royal',
+    displayName: 'Royal Edition',
+    domain: 'chasemail.com', // Confirmed primary domain for Royal accounts with VIP routing
+    description: 'Exclusive luxury tier with black, purple and gold trim aesthetic.',
+    maxAttachmentSizeMB: 50,
+    mailboxStorageGB: 100,
+    features: [
+      'Exclusive Royal account badge',
+      'Luxury black, purple & gold aesthetic',
+      'Gold-trimmed interface elements',
+      'Protected VIP account provisioning',
+      'Priority mail queue routing'
+    ],
+    badgeColor: '#d4af37',
+    isProtected: true
   },
   vanguard: {
     id: 'vanguard',
     displayName: 'Vanguard Edition',
     domain: 'chasevanguard.com',
+    description: 'Advanced tactical edition featuring black-and-green aesthetic and enhanced security.',
     maxAttachmentSizeMB: 50,
     mailboxStorageGB: 100,
     features: [
       'Native @chasevanguard.com address',
+      'Black-and-green visual styling & badge',
       'End-to-end security & 2FA enforcement',
       'Delivery queues & telemetry access',
-      'Custom theme creation studio'
+      'Protected Vanguard access provisioning'
     ],
-    badgeColor: '#00d2ff'
+    badgeColor: '#10b981',
+    isProtected: true
   },
   studio: {
     id: 'studio',
     displayName: 'Studio Edition',
     domain: 'chasestudios.org',
+    description: 'Reserved executive and founder tier for verified Chase Studios personnel.',
     maxAttachmentSizeMB: 100,
     mailboxStorageGB: 500,
     features: [
-      'Native @chasestudios.org address',
-      'Full administrative directory & user management',
-      'System-wide bounce queue monitor',
+      'Reserved for authorized Chase Studios personnel',
+      'Executive & Founder mailbox addressing',
+      'Optional executive gold trim',
+      'Administrative directory & user governance',
       'Direct Chase Studios network integration'
     ],
-    badgeColor: '#ba8cff'
+    badgeColor: '#c084fc',
+    isProtected: true
   }
 };
 

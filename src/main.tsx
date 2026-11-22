@@ -8,8 +8,9 @@ import { MessageDetail } from './components/MessageDetail';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AccountSettings } from './components/AccountSettings';
 import { GmailIntegration } from './components/GmailIntegration';
-import { Account, Mail, Draft, Contact, ExternalMail } from './lib/types';
-import { plannedAddress, getTier } from './lib/tiers';
+import { Account, Mail, Draft, Contact, ExternalMail, AccountTier } from './lib/types';
+import { plannedAddress, getTier, TIERS } from './lib/tiers';
+import { validateRegistrationCode } from './lib/accessCodes';
 
 const url =
   import.meta.env.VITE_SUPABASE_URL || 'https://rvetucuqburqnrgoatui.supabase.co';
@@ -150,6 +151,10 @@ function App() {
   const [opened, setOpened] = useState<Mail | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Registration Edition & Access Code State
+  const [registerTier, setRegisterTier] = useState<AccountTier>('community');
+  const [accessCode, setAccessCode] = useState('');
+
   // Previous unread count ref for desktop notifications
   const prevUnreadCountRef = useRef<number>(0);
 
@@ -180,6 +185,19 @@ function App() {
       localStorage.setItem('chase-mail-theme', theme);
     } catch {}
   }, [theme]);
+
+  // Gold Executive Trim effect
+  useEffect(() => {
+    const isGold =
+      localStorage.getItem('chase-mail-gold-trim') === 'true' ||
+      Boolean(account?.gold_trim) ||
+      account?.edition?.toLowerCase() === 'royal';
+    if (isGold) {
+      document.body.classList.add('gold-trim');
+    } else {
+      document.body.classList.remove('gold-trim');
+    }
+  }, [account]);
 
   // Persist Folder Sets
   useEffect(() => {
@@ -350,13 +368,44 @@ function App() {
   async function register() {
     if (!db) return;
     setBusy(true);
-    const { error } = await db.rpc('register_chase_mail_account', {
+
+    const tierDef = getTier(registerTier);
+    if (tierDef.isProtected) {
+      const codeValidation = validateRegistrationCode(accessCode, registerTier);
+      if (!codeValidation.valid) {
+        setBusy(false);
+        setNotice(codeValidation.error || 'Invalid registration access code for this edition.');
+        return;
+      }
+    }
+
+    // Try enhanced RPC first with p_edition and p_access_code
+    let rpcRes = await db.rpc('register_chase_mail_account', {
       p_handle: handle.trim(),
-      p_display_name: name.trim()
+      p_display_name: name.trim(),
+      p_edition: registerTier,
+      p_access_code: accessCode.trim()
     });
+
+    // If enhanced RPC is not found (parameter mismatch), fallback to standard 2-param RPC and update mail_accounts directly
+    if (rpcRes.error && (rpcRes.error.message?.includes('function register_chase_mail_account') || rpcRes.error.message?.includes('parameter'))) {
+      rpcRes = await db.rpc('register_chase_mail_account', {
+        p_handle: handle.trim(),
+        p_display_name: name.trim()
+      });
+      if (!rpcRes.error && session) {
+        try {
+          await db.from('mail_accounts').update({
+            edition: registerTier,
+            gold_trim: registerTier === 'royal' || registerTier === 'studio'
+          }).eq('user_id', session.user.id);
+        } catch {}
+      }
+    }
+
     setBusy(false);
-    setNotice(error?.message || 'Chase Mail account created.');
-    if (!error && session) {
+    setNotice(rpcRes.error?.message || 'Chase Mail account created.');
+    if (!rpcRes.error && session) {
       await refresh(session.user.id);
     }
   }
@@ -618,7 +667,14 @@ function App() {
   };
 
   const isPrivilegedTier =
-    account && (account.edition.toLowerCase() === 'studio' || account.edition.toLowerCase() === 'vanguard');
+    account &&
+    (Boolean(account.is_admin) ||
+      account.admin_role === 'super_admin' ||
+      account.admin_role === 'executive' ||
+      account.admin_role === 'admin' ||
+      account.edition.toLowerCase() === 'studio' ||
+      account.edition.toLowerCase() === 'royal' ||
+      account.edition.toLowerCase() === 'vanguard');
 
   return (
     <div className="shell">
@@ -733,9 +789,9 @@ function App() {
           </main>
         </div>
       ) : !account ? (
-        <main className="panel auth">
+        <main className="panel auth" style={{ maxWidth: '540px' }}>
           <h1>Set up your Chase Mail address</h1>
-          <p>Choose your username for the Chase Studios universe.</p>
+          <p>Choose your username and edition for the Chase Studios universe.</p>
           <form
             onSubmit={e => {
               e.preventDefault();
@@ -748,7 +804,7 @@ function App() {
                 required
                 maxLength={32}
                 value={handle}
-                onChange={e => setHandle(e.target.value)}
+                onChange={e => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))}
                 placeholder="yourname"
               />
             </label>
@@ -762,10 +818,51 @@ function App() {
                 placeholder="Your Name"
               />
             </label>
-            <button disabled={busy}>Create my inbox</button>
+
+            <div style={{ margin: '14px 0 8px 0' }}>
+              <label style={{ fontWeight: 600, display: 'block', marginBottom: '8px' }}>Select Account Edition</label>
+              <div className="registration-tier-cards">
+                {Object.values(TIERS).map(t => {
+                  const isSelected = registerTier === t.id;
+                  return (
+                    <div
+                      key={t.id}
+                      className={`registration-tier-card ${isSelected ? 'selected' : ''}`}
+                      onClick={() => setRegisterTier(t.id)}
+                    >
+                      <div className="tier-card-header">
+                        <span className={`edition-badge ${t.id}`}>{t.displayName}</span>
+                        {t.isProtected && <span style={{ fontSize: '0.75rem', color: '#ffd700' }}>🔒 Access Code</span>}
+                      </div>
+                      <div className="tier-card-desc">{t.description}</div>
+                      <div className="tier-card-domain">{plannedAddress(handle || 'yourname', t.id)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {getTier(registerTier).isProtected && (
+              <label style={{ marginTop: '12px', display: 'block' }}>
+                <span style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Registration Access Code</span>
+                  <span style={{ fontSize: '0.75rem', color: '#ba8cff' }}>Required for {getTier(registerTier).displayName}</span>
+                </span>
+                <input
+                  required
+                  value={accessCode}
+                  onChange={e => setAccessCode(e.target.value.trim())}
+                  placeholder={`Enter ${getTier(registerTier).displayName} registration code`}
+                  style={{ border: '1px solid rgba(212, 175, 55, 0.4)', background: 'rgba(212, 175, 55, 0.05)' }}
+                />
+              </label>
+            )}
+
+            <button disabled={busy} style={{ marginTop: '16px' }}>
+              {busy ? 'Creating inbox...' : `Create ${getTier(registerTier).displayName} Inbox`}
+            </button>
             <p className="hint">
-              This provisions your @chasemail.com address and registers your account across
-              the network.
+              This provisions your address ({plannedAddress(handle || 'yourname', registerTier)}) across the network.
             </p>
           </form>
         </main>
@@ -775,7 +872,16 @@ function App() {
             <div className="identity">
               <strong>{account.display_name || account.handle}</strong>
               <small>{plannedAddress(account.handle, account.edition)}</small>
-              <span className="tag">{getTier(account.edition).displayName.toUpperCase()}</span>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '6px', flexWrap: 'wrap' }}>
+                <span className={'edition-badge ' + (account.edition ? account.edition.toLowerCase() : 'community')}>
+                  {getTier(account.edition).displayName}
+                </span>
+                {account.is_admin && (
+                  <span className="edition-badge studio" style={{ fontSize: '0.68rem', letterSpacing: '0.05em' }}>
+                    👑 {account.admin_role ? account.admin_role.toUpperCase() : 'ADMIN'}
+                  </span>
+                )}
+              </div>
             </div>
 
             <button className="side" style={{ fontWeight: 700 }} onClick={handleOpenNewCompose}>
